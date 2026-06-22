@@ -103,12 +103,15 @@ private:
     std::unique_ptr<QRhiGraphicsPipeline> m_ovPs;
     std::unique_ptr<QRhiBuffer> m_ovUbo;
     std::unique_ptr<QRhiShaderResourceBindings> m_ovSrbToast; // binds the toast card
+    std::unique_ptr<QRhiShaderResourceBindings> m_ovSrbKeys;  // binds the keys bar
     std::unique_ptr<QRhiBuffer> m_ovVbuf;     // info panel quad
     std::unique_ptr<QRhiBuffer> m_cropVbuf;   // full-window crop chrome quad
     std::unique_ptr<QRhiBuffer> m_toastVbuf;  // toast quad
+    std::unique_ptr<QRhiBuffer> m_keysVbuf;   // keys bar quad
     std::unique_ptr<QRhiTexture> m_panelTex;
     std::unique_ptr<QRhiTexture> m_cropTex;
     std::unique_ptr<QRhiTexture> m_toastTex;
+    std::unique_ptr<QRhiTexture> m_keysTex;
 
     std::shared_ptr<const HdrImage> m_image;
     bool m_incomingDirty = false;
@@ -127,9 +130,11 @@ private:
     bool m_cropMouseDown = false;
     QPointF m_lastMousePos; // device px
 
-    bool m_infoVisible = true;  // info card shown by default; toggle off with `i`
-    QImage m_panelImage;       // pending RGBA8 panel to upload
+    bool m_infoVisible = true;  // info card + keys bar shown by default; toggle with `i`
+    QImage m_panelImage;       // pending RGBA8 metadata card to upload
     bool m_panelDirty = false; // m_panelImage needs (re)uploading
+    QImage m_keysImage;        // pending RGBA8 keys bar to upload
+    bool m_keysDirty = false;
 
     // One on-screen card slot, shared by transient toasts and the modal save prompt.
     bool m_toastVisible = false;

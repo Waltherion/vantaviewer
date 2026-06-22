@@ -63,6 +63,7 @@ add_executable(vantaviewer
     src/cm_tagging.cpp
     src/hdr_image.cpp
     icons/icons.qrc
+    resources.qrc
     "${CM_SOURCE}"
     "${CM_HEADER}"
 )

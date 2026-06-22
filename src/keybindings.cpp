@@ -179,37 +179,23 @@ void KeyBindings::mergeFromFile(const QString &path)
 
 void KeyBindings::writeTemplate(const QString &path) const
 {
+    // The bundled default config is the single source of truth, also shipped in the
+    // repo as keybindings.default.jsonc (embedded here via the Qt resource system).
+    QFile res(QStringLiteral(":/keybindings.default.jsonc"));
+    QByteArray content;
+    if (res.open(QIODevice::ReadOnly))
+        content = res.readAll();
+    if (content.isEmpty()) {
+        qWarning("vantaviewer: bundled default keybindings missing");
+        return;
+    }
     QDir().mkpath(QFileInfo(path).absolutePath());
     QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly)) {
         qWarning("vantaviewer: cannot write %s", qPrintable(path));
         return;
     }
-    const QByteArray tmpl = QString::fromUtf8(
-        "{\n"
-        "  // vantaviewer keybindings. Each action maps to one chord or a list.\n"
-        "  // A chord is e.g. \"f\", \"Right\", \"Ctrl+I\", \"[\", or a single key\n"
-        "  // like \"æ\" / \"ø\" / \"å\" on a Danish layout.\n"
-        "  // Defaults below follow US-layout key positions; remap freely, e.g.\n"
-        "  //   \"rotateCCW\": \"æ\",  \"rotateCW\": \"ø\",  \"rotate180\": \"å\"\n"
-        "\n"
-        "  \"next\":       [\"Right\", \"space\"],\n"
-        "  \"prev\":       \"Left\",\n"
-        "  \"fit\":        [\"0\", \"=\"],\n"
-        "  \"oneToOne\":   \"1\",\n"
-        "  \"rotateCW\":   \"]\",\n"
-        "  \"rotateCCW\":  \"[\",\n"
-        "  \"rotate180\":  \"r\",\n"
-        "  \"crop\":       \"c\",\n"
-        "  \"cropRatio\":  \"x\",\n"
-        "  \"cropRatioPrev\": \"z\",\n"
-        "  \"save\":       \"Ctrl+S\",\n"
-        "  \"saveAs\":     \"Ctrl+Shift+S\",\n"
-        "  \"info\":       \"i\",\n"
-        "  \"fullscreen\": \"f\",\n"
-        "  \"quit\":       [\"q\", \"Escape\"]\n"
-        "}\n").toUtf8();
-    f.write(tmpl);
+    f.write(content);
     f.commit();
 }
 

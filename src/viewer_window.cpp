@@ -305,12 +305,16 @@ void ViewerWindow::initOverlay()
     m_cropVbuf->create();
     m_toastVbuf.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 16 * sizeof(float)));
     m_toastVbuf->create();
+    m_keysVbuf.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 16 * sizeof(float)));
+    m_keysVbuf->create();
     m_panelTex.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
     m_panelTex->create();
     m_cropTex.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
     m_cropTex->create();
     m_toastTex.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
     m_toastTex->create();
+    m_keysTex.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+    m_keysTex->create();
 
     m_ovSrb.reset(m_rhi->newShaderResourceBindings());
     m_ovSrb->setBindings({
@@ -335,6 +339,14 @@ void ViewerWindow::initOverlay()
                                                   m_toastTex.get(), m_sampler.get())
     });
     m_ovSrbToast->create();
+
+    m_ovSrbKeys.reset(m_rhi->newShaderResourceBindings());
+    m_ovSrbKeys->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, m_ovUbo.get()),
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                  m_keysTex.get(), m_sampler.get())
+    });
+    m_ovSrbKeys->create();
 
     QRhiVertexInputLayout layout;
     layout.setBindings({ { 4 * sizeof(float) } });
@@ -429,17 +441,48 @@ void ViewerWindow::render()
     };
     rub->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ubo), ubo);
 
-    // Prepare overlays (crop chrome under, info card + toast on top) before the pass.
+    // Prepare overlays (crop chrome under, info card + keys bar + toast on top).
     const bool drawInfo = m_infoVisible && !m_panelImage.isNull() && m_firstShown;
+    const bool drawKeys = m_infoVisible && !m_keysImage.isNull() && m_firstShown;
     const bool drawCrop = m_crop.active() && m_firstShown;
     const bool drawToast = m_toastVisible && !m_toastImage.isNull() && m_firstShown;
     const float W = float(outputSize.width()), H = float(outputSize.height());
+    const float dpr = float(devicePixelRatio());
     auto ndx = [&](float x) { return x / W * 2.0f - 1.0f; };
     auto ndy = [&](float y) { return y / H * 2.0f - 1.0f; };
 
-    if (drawInfo || drawCrop || drawToast) {
+    if (drawInfo || drawKeys || drawCrop || drawToast) {
         const float ov[4] = { m_scale, sdrFlag, 0.0f, 0.0f };
         rub->updateDynamicBuffer(m_ovUbo.get(), 0, sizeof(ov), ov);
+    }
+
+    // Keys bar across the bottom centre.
+    float keysBarTop = H; // y of the keys bar top (used to lift the toast above it)
+    if (drawKeys) {
+        if (m_keysDirty) {
+            const QImage img = m_keysImage.convertToFormat(QImage::Format_RGBA8888);
+            if (m_keysTex->pixelSize() != img.size()) {
+                m_keysTex->destroy();
+                m_keysTex->setPixelSize(img.size());
+                m_keysTex->create();
+            }
+            QRhiTextureSubresourceUploadDescription sub(img);
+            QRhiTextureUploadEntry entry(0, 0, sub);
+            rub->uploadTexture(m_keysTex.get(), QRhiTextureUploadDescription(entry));
+            m_keysDirty = false;
+        }
+        const float pw = float(m_keysTex->pixelSize().width());
+        const float ph = float(m_keysTex->pixelSize().height());
+        const float bx = (W - pw) * 0.5f;
+        const float by = H - 18.0f * dpr - ph;
+        keysBarTop = by;
+        const float x0 = ndx(bx), y0 = ndy(by);
+        const float x1 = ndx(bx + pw), y1 = ndy(by + ph);
+        const float verts[16] = {
+            x0, y0, 0.0f, 0.0f,  x1, y0, 1.0f, 0.0f,
+            x0, y1, 0.0f, 1.0f,  x1, y1, 1.0f, 1.0f
+        };
+        rub->updateDynamicBuffer(m_keysVbuf.get(), 0, sizeof(verts), verts);
     }
 
     if (drawCrop) {
@@ -517,9 +560,10 @@ void ViewerWindow::render()
         const float pw = float(m_toastTex->pixelSize().width());
         const float ph = float(m_toastTex->pixelSize().height());
         const float bx = (W - pw) * 0.5f;
-        // Prompts sit centred; transient toasts sit near the bottom.
-        const float by = m_cardCentered ? (H - ph) * 0.5f
-                                        : H - 32.0f * float(devicePixelRatio()) - ph;
+        // Prompts sit centred; transient toasts sit near the bottom, lifted above the
+        // keys bar when it's showing.
+        const float bottomY = (drawKeys ? keysBarTop : H) - 14.0f * dpr - ph;
+        const float by = m_cardCentered ? (H - ph) * 0.5f : bottomY;
         const float x0 = ndx(bx), y0 = ndy(by);
         const float x1 = ndx(bx + pw), y1 = ndy(by + ph);
         const float verts[16] = {
@@ -549,6 +593,14 @@ void ViewerWindow::render()
         cb->setViewport({ 0, 0, float(outputSize.width()), float(outputSize.height()) });
         cb->setShaderResources(m_ovSrb.get());
         const QRhiCommandBuffer::VertexInput vbuf(m_ovVbuf.get(), 0);
+        cb->setVertexInput(0, 1, &vbuf);
+        cb->draw(4);
+    }
+    if (drawKeys) {
+        cb->setGraphicsPipeline(m_ovPs.get());
+        cb->setViewport({ 0, 0, float(outputSize.width()), float(outputSize.height()) });
+        cb->setShaderResources(m_ovSrbKeys.get());
+        const QRhiCommandBuffer::VertexInput vbuf(m_keysVbuf.get(), 0);
         cb->setVertexInput(0, 1, &vbuf);
         cb->draw(4);
     }
@@ -594,8 +646,10 @@ void ViewerWindow::rebuildInfoPanel()
     }
     m_panelImage = m_info.build(m_currentPath, *m_image, m_hdrMode,
                                 m_playlist.currentIndex() + 1, m_playlist.size(),
-                                keys, devicePixelRatio());
+                                devicePixelRatio());
     m_panelDirty = true;
+    m_keysImage = m_info.buildKeysBar(keys, /*columns=*/3, devicePixelRatio());
+    m_keysDirty = true;
 }
 
 static QImage buildToastCard(const QString &text, qreal dpr)
