@@ -23,6 +23,10 @@ public:
     // The action bound to this key event, or an empty string if none.
     QString actionFor(QKeyEvent *e) const;
 
+    // Pretty display of the first chord bound to action ("Ctrl+S", "→", "["); empty
+    // if the action has no binding. For the on-screen key list.
+    QString primaryChordDisplay(const QString &action) const;
+
     static QString configPath();
 
 private:

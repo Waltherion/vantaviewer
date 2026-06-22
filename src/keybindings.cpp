@@ -131,6 +131,7 @@ void KeyBindings::setDefaults()
     add("cropRatio",  { "x" });
     add("cropRatioPrev", { "z" });
     add("save",       { "Ctrl+S" });
+    add("saveAs",     { "Ctrl+Shift+S" });
     add("info",       { "i" });
     add("fullscreen", { "f" });
     add("quit",       { "q", "Escape" });
@@ -203,12 +204,43 @@ void KeyBindings::writeTemplate(const QString &path) const
         "  \"cropRatio\":  \"x\",\n"
         "  \"cropRatioPrev\": \"z\",\n"
         "  \"save\":       \"Ctrl+S\",\n"
+        "  \"saveAs\":     \"Ctrl+Shift+S\",\n"
         "  \"info\":       \"i\",\n"
         "  \"fullscreen\": \"f\",\n"
         "  \"quit\":       [\"q\", \"Escape\"]\n"
         "}\n").toUtf8();
     f.write(tmpl);
     f.commit();
+}
+
+QString KeyBindings::primaryChordDisplay(const QString &action) const
+{
+    const QStringList chords = m_actions.value(action);
+    if (chords.isEmpty())
+        return QString();
+    // The stored chord is normalised lowercase ("ctrl+s", "right", "["). Prettify it.
+    QStringList parts = chords.first().split(QLatin1Char('+'), Qt::SkipEmptyParts);
+    QStringList outMods;
+    QString base;
+    for (const QString &p : parts) {
+        if (p == QLatin1String("ctrl"))       outMods << QStringLiteral("Ctrl");
+        else if (p == QLatin1String("alt"))   outMods << QStringLiteral("Alt");
+        else if (p == QLatin1String("shift")) outMods << QStringLiteral("Shift");
+        else if (p == QLatin1String("meta"))  outMods << QStringLiteral("Super");
+        else                                  base = p;
+    }
+    static const QHash<QString, QString> named = {
+        { QStringLiteral("right"), QStringLiteral("→") }, { QStringLiteral("left"), QStringLiteral("←") },
+        { QStringLiteral("up"), QStringLiteral("↑") },    { QStringLiteral("down"), QStringLiteral("↓") },
+        { QStringLiteral("escape"), QStringLiteral("Esc") }, { QStringLiteral("space"), QStringLiteral("Space") },
+        { QStringLiteral("enter"), QStringLiteral("Enter") }, { QStringLiteral("tab"), QStringLiteral("Tab") },
+    };
+    if (named.contains(base))
+        base = named.value(base);
+    else if (base.size() == 1)
+        base = base.toUpper();
+    outMods << base;
+    return outMods.join(QLatin1Char('+'));
 }
 
 QString KeyBindings::actionFor(QKeyEvent *e) const

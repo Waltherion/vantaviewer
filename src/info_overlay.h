@@ -2,6 +2,8 @@
 
 #include <QImage>
 #include <QString>
+#include <QList>
+#include <QPair>
 
 #include "hdr_image.h"
 
@@ -12,7 +14,9 @@ class InfoOverlay
 {
 public:
     // monitorHdr drives the "Monitor: HDR/SDR" line; dpr scales for HiDPI sharpness.
-    // indexInFolder is 1-based; folderCount <= 0 hides the position line.
+    // indexInFolder is 1-based; folderCount <= 0 hides the position line. keys is a
+    // list of (keyDisplay, label) rows shown as a "Keys" section (empty -> omitted).
     QImage build(const QString &path, const HdrImage &img, bool monitorHdr,
-                 int indexInFolder, int folderCount, qreal dpr) const;
+                 int indexInFolder, int folderCount,
+                 const QList<QPair<QString, QString>> &keys, qreal dpr) const;
 };

@@ -17,7 +17,7 @@ Supported formats: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG, 16-bit HDR 
 (cICP), and all the usual SDR formats (PNG/JPEG/WebP/TIFF/BMP) — same decoders as
 vantapaper (`src/hdr_image.cpp`).
 
-## Status — v0.1
+## Status — v0.2
 
 Early but functional. What works:
 
@@ -25,12 +25,14 @@ Early but functional. What works:
   monitor modes, with both HDR and SDR images, true black on OLED.
 - Fit / zoom (on cursor) / pan, 90°/180° rotation.
 - Folder navigation (←/→) with background neighbour prefetch; live HDR/SDR follow.
-- Crop with fixed ratios + freeform, rule-of-thirds guides, info overlay (`i`).
-- Export the current view (crop + rotation) to a new AVIF, HDR preserved (`Ctrl+S`).
+- Crop with fixed ratios + freeform, rule-of-thirds guides; default-on info overlay
+  (`i`) that also lists the keybindings.
+- Save the current view (crop + rotation) preserving the source format — overwrite
+  in place (`Ctrl+S`) or save as (`Ctrl+Shift+S`).
 - Fully remappable keybindings (JSONC).
 
-Planned next: destructive crop with overwrite / save-as, wide-gamut (BT.2020)
-export, a file-picker dialog, and live config reload.
+Planned next: wide-gamut (BT.2020) export, JPEG-XL/HEIC encoding, a file-picker
+dialog, and live config reload.
 
 ### On SDR / non-HDR displays
 
@@ -52,18 +54,29 @@ fit ↔ 1:1.
 
 Default keys: `→`/`Space` next, `←` previous, `0`/`=` fit, `1` 1:1,
 `]`/`[` rotate ±90°, `r` rotate 180°, `c` crop, `x`/`z` cycle crop ratio,
-`i` info overlay, `f` fullscreen, `q`/`Esc` quit (`Esc` also cancels crop). Arrow
+`Ctrl+S` save (overwrite), `Ctrl+Shift+S` save as, `i` toggle the info overlay,
+`f` fullscreen, `q`/`Esc` quit (`Esc` also cancels crop / a save prompt). Arrow
 keys walk the folder of the opened file (sorted), with neighbours prefetched for
-instant navigation. HDR/SDR follows the monitor live.
+instant navigation. HDR/SDR follows the monitor live. The info overlay is shown by
+default and lists the current keybindings.
 
 In crop mode, drag the handles to resize and the interior to move; cycle aspect
 ratios (Free, Original, 16:9, 21:9, 4:3, 3:2, 1:1, 9:16, 16:10) with `x`/`z` — a
 locked ratio shows the four corner handles, freeform shows all eight.
 
-`Ctrl+S` exports the current view (crop + rotation applied) to a new AVIF beside the
-original — never overwriting it — named `<name>-crop.avif`. HDR images are written as
-10-bit PQ, SDR as 8-bit sRGB, at full resolution and luminance. (The export gamut is
-the BT.709 working space; wide-gamut BT.2020 preservation is a planned refinement.)
+Saving applies the current crop + rotation and **preserves the source format**,
+chosen by the output file's extension:
+
+- **AVIF** — HDR as 10-bit PQ, SDR as 8-bit sRGB.
+- **PNG** — HDR as 16-bit PQ with a `cICP` chunk (round-trips losslessly), SDR as 8-bit.
+- **JPEG / WebP / TIFF / BMP** — SDR only (these can't carry our HDR).
+- JPEG-XL and HEIC encoding aren't supported yet (you'll get a clear message).
+
+`Ctrl+S` overwrites the current file in place (a confirm prompt appears; Enter
+accepts). `Ctrl+Shift+S` is *Save as* — type a target path; the format follows the
+extension you type. Everything is written at full resolution and luminance. (The
+working/export gamut is BT.709; wide-gamut BT.2020 preservation is a planned
+refinement.)
 
 All keys are remappable in a JSONC config at
 `~/.config/vantaviewer/keybindings.jsonc` (written with defaults on first run) —

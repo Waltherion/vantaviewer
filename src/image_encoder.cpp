@@ -1,6 +1,10 @@
 #include "image_encoder.h"
 
 #include <QFile>
+#include <QFileInfo>
+#include <QBuffer>
+#include <QImage>
+#include <QColorSpace>
 #include <QtCore/qfloat16.h>
 
 #include <avif/avif.h>
@@ -59,10 +63,10 @@ std::vector<uint16_t> cropRotate(const HdrImage &img, QRect crop, int rot,
             const size_t s = (size_t(sy) * img.w + sx) * 4;
             int dx, dy;
             switch (rot) {
-            case 1: dx = ch - 1 - y; dy = x;             break; // 90 CW
-            case 2: dx = cw - 1 - x; dy = ch - 1 - y;    break; // 180
-            case 3: dx = y;          dy = cw - 1 - x;    break; // 270 CW
-            default: dx = x;         dy = y;             break;
+            case 1: dx = ch - 1 - y; dy = x;          break; // 90 CW
+            case 2: dx = cw - 1 - x; dy = ch - 1 - y; break; // 180
+            case 3: dx = y;          dy = cw - 1 - x; break; // 270 CW
+            default: dx = x;         dy = y;          break;
             }
             const size_t d = (size_t(dy) * outW + dx) * 4;
             dst[d + 0] = src[s + 0];
@@ -74,21 +78,55 @@ std::vector<uint16_t> cropRotate(const HdrImage &img, QRect crop, int rot,
     return out;
 }
 
-} // namespace
-
-namespace encoder {
-
-Result encodeAvif(const QString &outPath, const HdrImage &img,
-                  const QRect &crop, int rotationQuadrant, int quality)
+uint32_t pngCrc(const uint8_t *buf, size_t len)
 {
-    if (!img.valid())
-        return { false, QStringLiteral("invalid image") };
+    uint32_t table[256];
+    for (uint32_t n = 0; n < 256; ++n) {
+        uint32_t c = n;
+        for (int k = 0; k < 8; ++k)
+            c = (c & 1) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+        table[n] = c;
+    }
+    uint32_t c = 0xffffffffu;
+    for (size_t i = 0; i < len; ++i)
+        c = table[(c ^ buf[i]) & 0xff] ^ (c >> 8);
+    return c ^ 0xffffffffu;
+}
 
-    int w = 0, h = 0;
-    const std::vector<uint16_t> px = cropRotate(img, crop, rotationQuadrant, w, h);
-    const qfloat16 *p = reinterpret_cast<const qfloat16 *>(px.data());
+// Insert a cICP chunk (primaries, transfer, matrix=0, full-range=1) right after IHDR
+// so the decoder reads the PNG's true HDR transfer/primaries.
+QByteArray injectCicp(const QByteArray &png, uint8_t primaries, uint8_t transfer)
+{
+    if (png.size() < 33 || !png.startsWith(QByteArray::fromRawData("\x89PNG\r\n\x1a\n", 8)))
+        return png; // not a PNG we recognise; leave untouched
 
-    const bool hdr = img.hdr;
+    const uint8_t data[4] = { primaries, transfer, 0, 1 };
+    QByteArray chunk;
+    auto be32 = [&chunk](uint32_t v) {
+        chunk.append(char(v >> 24)); chunk.append(char(v >> 16));
+        chunk.append(char(v >> 8));  chunk.append(char(v));
+    };
+    be32(4);                          // length of data
+    QByteArray typeAndData("cICP");
+    typeAndData.append(reinterpret_cast<const char *>(data), 4);
+    chunk.append(typeAndData);
+    be32(pngCrc(reinterpret_cast<const uint8_t *>(typeAndData.constData()),
+                size_t(typeAndData.size())));
+
+    // IHDR is the first chunk: 8-byte signature + (4 len + 4 type + 13 data + 4 crc) = 33.
+    QByteArray out = png.left(33);
+    out.append(chunk);
+    out.append(png.mid(33));
+    return out;
+}
+
+QImage::Format sdr8Format() { return QImage::Format_RGB888; }
+
+// ---- per-format encoders, operating on a pre-cropped/rotated fp16 buffer ----
+
+encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, int h,
+                              bool hdr, int quality)
+{
     const int depth = hdr ? 10 : 8;
     const int maxv = (1 << depth) - 1;
 
@@ -118,7 +156,6 @@ Result encodeAvif(const QString &outPath, const HdrImage &img,
             float r = float(p[s + 0]), g = float(p[s + 1]), b = float(p[s + 2]);
             float er, eg, eb;
             if (hdr) {
-                // linear (1.0 = 203 nits) -> fraction of 10000 nits -> PQ encoded.
                 er = pqInverse(r * 203.0f / 10000.0f);
                 eg = pqInverse(g * 203.0f / 10000.0f);
                 eb = pqInverse(b * 203.0f / 10000.0f);
@@ -165,11 +202,119 @@ Result encodeAvif(const QString &outPath, const HdrImage &img,
     const qint64 sz = qint64(out.size);
     const qint64 written = f.write(reinterpret_cast<const char *>(out.data), sz);
     f.close();
-    avifRWDataFree(&out); // resets out.size -- compare against the captured sz, not out.size
+    avifRWDataFree(&out);
     if (written != sz)
         return { false, QStringLiteral("short write to %1").arg(outPath) };
-
     return { true, outPath };
+}
+
+encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, int h, bool hdr)
+{
+    QByteArray bytes;
+    if (hdr) {
+        // 16-bit PQ, plus a cICP chunk (BT.709 primaries, PQ transfer) injected below.
+        QImage img(w, h, QImage::Format_RGBA64);
+        for (int y = 0; y < h; ++y) {
+            quint16 *row = reinterpret_cast<quint16 *>(img.scanLine(y));
+            for (int x = 0; x < w; ++x) {
+                const size_t s = (size_t(y) * w + x) * 4;
+                const float r = float(p[s + 0]), g = float(p[s + 1]), b = float(p[s + 2]);
+                row[x * 4 + 0] = quint16(std::lround(std::clamp(pqInverse(r * 203.0f / 10000.0f), 0.0f, 1.0f) * 65535.0f));
+                row[x * 4 + 1] = quint16(std::lround(std::clamp(pqInverse(g * 203.0f / 10000.0f), 0.0f, 1.0f) * 65535.0f));
+                row[x * 4 + 2] = quint16(std::lround(std::clamp(pqInverse(b * 203.0f / 10000.0f), 0.0f, 1.0f) * 65535.0f));
+                row[x * 4 + 3] = 65535;
+            }
+        }
+        img.setColorSpace(QColorSpace()); // don't embed an sRGB/iCCP profile
+        QBuffer buf(&bytes);
+        buf.open(QIODevice::WriteOnly);
+        if (!img.save(&buf, "PNG"))
+            return { false, QStringLiteral("PNG encode failed") };
+        buf.close();
+        bytes = injectCicp(bytes, /*primaries BT.709*/ 1, /*transfer PQ*/ 16);
+    } else {
+        QImage img(w, h, sdr8Format());
+        for (int y = 0; y < h; ++y) {
+            uchar *row = img.scanLine(y);
+            for (int x = 0; x < w; ++x) {
+                const size_t s = (size_t(y) * w + x) * 4;
+                row[x * 3 + 0] = uchar(std::lround(srgbEncode(float(p[s + 0])) * 255.0f));
+                row[x * 3 + 1] = uchar(std::lround(srgbEncode(float(p[s + 1])) * 255.0f));
+                row[x * 3 + 2] = uchar(std::lround(srgbEncode(float(p[s + 2])) * 255.0f));
+            }
+        }
+        QBuffer buf(&bytes);
+        buf.open(QIODevice::WriteOnly);
+        if (!img.save(&buf, "PNG"))
+            return { false, QStringLiteral("PNG encode failed") };
+    }
+
+    QFile f(outPath);
+    if (!f.open(QIODevice::WriteOnly))
+        return { false, QStringLiteral("cannot write %1").arg(outPath) };
+    f.write(bytes);
+    f.close();
+    return { true, outPath };
+}
+
+encoder::Result encodeQImageSdr(const QString &outPath, const qfloat16 *p, int w, int h)
+{
+    QImage img(w, h, sdr8Format());
+    for (int y = 0; y < h; ++y) {
+        uchar *row = img.scanLine(y);
+        for (int x = 0; x < w; ++x) {
+            const size_t s = (size_t(y) * w + x) * 4;
+            row[x * 3 + 0] = uchar(std::lround(srgbEncode(float(p[s + 0])) * 255.0f));
+            row[x * 3 + 1] = uchar(std::lround(srgbEncode(float(p[s + 1])) * 255.0f));
+            row[x * 3 + 2] = uchar(std::lround(srgbEncode(float(p[s + 2])) * 255.0f));
+        }
+    }
+    if (!img.save(outPath))
+        return { false, QStringLiteral("encode/write failed for %1").arg(outPath) };
+    return { true, outPath };
+}
+
+} // namespace
+
+namespace encoder {
+
+bool canEncodeExtension(const QString &ext, bool hdr)
+{
+    const QString e = ext.toLower();
+    if (e == QLatin1String("avif"))
+        return true;
+    if (e == QLatin1String("png"))
+        return true;
+    if (e == QLatin1String("jpg") || e == QLatin1String("jpeg") || e == QLatin1String("webp")
+        || e == QLatin1String("tiff") || e == QLatin1String("tif") || e == QLatin1String("bmp"))
+        return !hdr; // these can't carry our HDR
+    return false;    // jxl, heic: not yet supported for encoding
+}
+
+Result encode(const QString &outPath, const HdrImage &img,
+              const QRect &crop, int rotationQuadrant, int quality)
+{
+    if (!img.valid())
+        return { false, QStringLiteral("invalid image") };
+
+    const QString ext = QFileInfo(outPath).suffix().toLower();
+    if (!canEncodeExtension(ext, img.hdr)) {
+        if (img.hdr && (ext == QLatin1String("jpg") || ext == QLatin1String("jpeg")
+                        || ext == QLatin1String("webp") || ext == QLatin1String("tiff")
+                        || ext == QLatin1String("tif") || ext == QLatin1String("bmp")))
+            return { false, QStringLiteral("%1 can't hold HDR — save as AVIF or PNG").arg(ext.toUpper()) };
+        return { false, QStringLiteral("encoding to .%1 is not supported yet").arg(ext) };
+    }
+
+    int w = 0, h = 0;
+    const std::vector<uint16_t> px = cropRotate(img, crop, rotationQuadrant, w, h);
+    const qfloat16 *p = reinterpret_cast<const qfloat16 *>(px.data());
+
+    if (ext == QLatin1String("avif"))
+        return encodeAvifBuf(outPath, p, w, h, img.hdr, quality);
+    if (ext == QLatin1String("png"))
+        return encodePngBuf(outPath, p, w, h, img.hdr);
+    return encodeQImageSdr(outPath, p, w, h);
 }
 
 } // namespace encoder

@@ -61,8 +61,16 @@ private:
     void render();
     void resizeTexture(const HdrImage &img);
     void rebuildInfoPanel(); // refresh the info card from the current image/mode
-    void saveCurrent();      // export current (crop+rotate applied) to a new AVIF
     void showToast(const QString &text);
+
+    // Save flow. Ctrl+S overwrites the current file (with a confirm prompt, preserving
+    // its format); Ctrl+Shift+S opens an in-place text field to type a target path.
+    void beginSaveOverwrite();
+    void beginSaveAs();
+    void performSave(const QString &path); // async encode + toast
+    void rebuildPromptCard();              // (re)render the modal card
+    void cancelPrompt();
+    QString resolveSavePath(const QString &typed) const;
     QPointF devicePos(QPointF logical) const { return logical * devicePixelRatio(); }
 
     // Display a decoded image. resetView=true reframes (fit, rotation cleared) for a
@@ -114,15 +122,22 @@ private:
     bool m_cropMouseDown = false;
     QPointF m_lastMousePos; // device px
 
-    bool m_infoVisible = false;
+    bool m_infoVisible = true;  // info card shown by default; toggle off with `i`
     QImage m_panelImage;       // pending RGBA8 panel to upload
     bool m_panelDirty = false; // m_panelImage needs (re)uploading
 
+    // One on-screen card slot, shared by transient toasts and the modal save prompt.
     bool m_toastVisible = false;
     QImage m_toastImage;
     bool m_toastDirty = false;
+    bool m_cardCentered = false; // prompts render centred; toasts at the bottom
     QTimer m_toastTimer;
-    bool m_saving = false;     // an async export is in flight
+    bool m_saving = false;       // an async export is in flight
+
+    enum class Input { None, ConfirmOverwrite, SaveAs };
+    Input m_inputMode = Input::None;
+    QString m_inputText;   // editable path while in SaveAs
+    QString m_inputTarget; // path to overwrite while in ConfirmOverwrite
 
     float m_scale = 2.5375f; // 203/80
 

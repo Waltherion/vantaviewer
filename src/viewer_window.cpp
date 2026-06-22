@@ -477,7 +477,9 @@ void ViewerWindow::render()
         const float pw = float(m_toastTex->pixelSize().width());
         const float ph = float(m_toastTex->pixelSize().height());
         const float bx = (W - pw) * 0.5f;
-        const float by = H - 32.0f * float(devicePixelRatio()) - ph;
+        // Prompts sit centred; transient toasts sit near the bottom.
+        const float by = m_cardCentered ? (H - ph) * 0.5f
+                                        : H - 32.0f * float(devicePixelRatio()) - ph;
         const float x0 = ndx(bx), y0 = ndy(by);
         const float x1 = ndx(bx + pw), y1 = ndy(by + ph);
         const float verts[16] = {
@@ -527,9 +529,32 @@ void ViewerWindow::rebuildInfoPanel()
 {
     if (!m_image || !m_image->valid())
         return;
+    static const QList<QPair<QString, QString>> kActions = {
+        { QStringLiteral("next"), QStringLiteral("Next") },
+        { QStringLiteral("prev"), QStringLiteral("Previous") },
+        { QStringLiteral("fit"), QStringLiteral("Fit") },
+        { QStringLiteral("oneToOne"), QStringLiteral("1:1") },
+        { QStringLiteral("rotateCW"), QStringLiteral("Rotate right") },
+        { QStringLiteral("rotateCCW"), QStringLiteral("Rotate left") },
+        { QStringLiteral("rotate180"), QStringLiteral("Rotate 180°") },
+        { QStringLiteral("crop"), QStringLiteral("Crop") },
+        { QStringLiteral("cropRatio"), QStringLiteral("Crop ratio +") },
+        { QStringLiteral("cropRatioPrev"), QStringLiteral("Crop ratio −") },
+        { QStringLiteral("save"), QStringLiteral("Save") },
+        { QStringLiteral("saveAs"), QStringLiteral("Save as") },
+        { QStringLiteral("info"), QStringLiteral("Info") },
+        { QStringLiteral("fullscreen"), QStringLiteral("Fullscreen") },
+        { QStringLiteral("quit"), QStringLiteral("Quit") },
+    };
+    QList<QPair<QString, QString>> keys;
+    for (const auto &a : kActions) {
+        const QString disp = m_keys.primaryChordDisplay(a.first);
+        if (!disp.isEmpty())
+            keys.append({ disp, a.second });
+    }
     m_panelImage = m_info.build(m_currentPath, *m_image, m_hdrMode,
                                 m_playlist.currentIndex() + 1, m_playlist.size(),
-                                devicePixelRatio());
+                                keys, devicePixelRatio());
     m_panelDirty = true;
 }
 
@@ -563,17 +588,66 @@ void ViewerWindow::showToast(const QString &text)
     m_toastImage = buildToastCard(text, devicePixelRatio());
     m_toastDirty = true;
     m_toastVisible = true;
+    m_cardCentered = false;
     m_toastTimer.start(2600);
     requestUpdate();
 }
 
-void ViewerWindow::saveCurrent()
+void ViewerWindow::beginSaveOverwrite()
 {
-    if (m_saving || m_currentPath.isEmpty())
+    if (m_saving || m_currentPath.isEmpty() || m_inputMode != Input::None)
+        return;
+    const QFileInfo fi(m_currentPath);
+    const bool hdr = m_image && m_image->hdr;
+    if (!encoder::canEncodeExtension(fi.suffix(), hdr)) {
+        showToast(QStringLiteral("Can't overwrite .%1 (encoding unsupported) — use Save as")
+                      .arg(fi.suffix().toLower()));
+        return;
+    }
+    m_inputMode = Input::ConfirmOverwrite;
+    m_inputTarget = m_currentPath;
+    rebuildPromptCard();
+    requestUpdate();
+}
+
+void ViewerWindow::beginSaveAs()
+{
+    if (m_saving || m_currentPath.isEmpty() || m_inputMode != Input::None)
+        return;
+    m_inputMode = Input::SaveAs;
+    m_inputText = m_currentPath; // pre-filled with the current path; edit freely
+    rebuildPromptCard();
+    requestUpdate();
+}
+
+void ViewerWindow::cancelPrompt()
+{
+    m_inputMode = Input::None;
+    m_toastVisible = false;
+    requestUpdate();
+}
+
+QString ViewerWindow::resolveSavePath(const QString &typed) const
+{
+    QString t = typed.trimmed();
+    if (t.isEmpty())
+        return QString();
+    if (t.startsWith(QLatin1Char('~')))
+        t = QDir::homePath() + t.mid(1);
+    if (!t.contains(QLatin1Char('/'))) // bare filename -> current file's directory
+        t = QFileInfo(m_currentPath).dir().filePath(t);
+    return QFileInfo(t).absoluteFilePath();
+}
+
+void ViewerWindow::performSave(const QString &path)
+{
+    m_inputMode = Input::None;
+    m_toastVisible = false;
+    if (m_saving || path.isEmpty())
         return;
     auto img = m_loader.loadSync(m_currentPath); // guaranteed full-resolution
     if (!img || !img->valid()) {
-        showToast(QStringLiteral("Cannot export: decode failed"));
+        showToast(QStringLiteral("Cannot save: decode failed"));
         return;
     }
 
@@ -584,29 +658,47 @@ void ViewerWindow::saveCurrent()
     }
     const int rot = m_view.rotation();
 
-    // Non-colliding sibling path: <base>-crop.avif, then -crop-1, -crop-2, ...
-    const QFileInfo fi(m_currentPath);
-    const QString stem = fi.dir().filePath(fi.completeBaseName() + QStringLiteral("-crop"));
-    QString out = stem + QStringLiteral(".avif");
-    for (int n = 1; QFile::exists(out); ++n)
-        out = QStringLiteral("%1-%2.avif").arg(stem).arg(n);
-
     m_saving = true;
-    showToast(QStringLiteral("Exporting…"));
+    showToast(QStringLiteral("Saving…"));
 
+    const QString cur = m_currentPath;
     auto *watcher = new QFutureWatcher<encoder::Result>(this);
-    connect(watcher, &QFutureWatcher<encoder::Result>::finished, this, [this, watcher]() {
+    connect(watcher, &QFutureWatcher<encoder::Result>::finished, this, [this, watcher, path, cur]() {
         const encoder::Result res = watcher->result();
         watcher->deleteLater();
         m_saving = false;
-        if (res.ok)
+        if (res.ok) {
             showToast(QStringLiteral("Saved %1").arg(QFileInfo(res.message).fileName()));
-        else
-            showToast(QStringLiteral("Export failed: %1").arg(res.message));
+            // Rescan so a newly written sibling shows up in navigation.
+            m_playlist.reload();
+            m_playlist.setCurrentPath(cur);
+            updateHotSet();
+        } else {
+            showToast(QStringLiteral("Save failed: %1").arg(res.message));
+        }
     });
-    watcher->setFuture(QtConcurrent::run([img, out, crop, rot]() {
-        return encoder::encodeAvif(out, *img, crop, rot);
+    watcher->setFuture(QtConcurrent::run([img, path, crop, rot]() {
+        return encoder::encode(path, *img, crop, rot);
     }));
+}
+
+void ViewerWindow::rebuildPromptCard()
+{
+    QString label;
+    if (m_inputMode == Input::ConfirmOverwrite) {
+        label = QStringLiteral("Overwrite %1 ?    Enter = yes    Esc = no")
+                    .arg(QFileInfo(m_inputTarget).fileName());
+    } else if (m_inputMode == Input::SaveAs) {
+        label = QStringLiteral("Save as:  %1▏    Enter = save    Esc = cancel")
+                    .arg(m_inputText);
+    } else {
+        return;
+    }
+    m_toastImage = buildToastCard(label, devicePixelRatio());
+    m_toastDirty = true;
+    m_toastVisible = true;
+    m_cardCentered = true;
+    m_toastTimer.stop(); // a prompt stays until answered
 }
 
 void ViewerWindow::exposeEvent(QExposeEvent *)
@@ -619,6 +711,10 @@ void ViewerWindow::exposeEvent(QExposeEvent *)
     const QSize surfaceSize = m_hasSwapChain ? m_sc->surfacePixelSize() : QSize();
 
     if (isExposed() && m_initialized && m_hasSwapChain && !surfaceSize.isEmpty()) {
+        // Build the (default-on) info card now that the real device-pixel-ratio is known.
+        if (m_infoVisible && m_panelImage.isNull())
+            rebuildInfoPanel();
+
         render();
 
         if (!m_colorApplied) {
@@ -657,6 +753,26 @@ bool ViewerWindow::event(QEvent *e)
 
 void ViewerWindow::keyPressEvent(QKeyEvent *e)
 {
+    // Modal save prompt swallows all keys until answered.
+    if (m_inputMode != Input::None) {
+        if (e->key() == Qt::Key_Escape) {
+            cancelPrompt();
+        } else if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+            if (m_inputMode == Input::ConfirmOverwrite)
+                performSave(m_inputTarget);
+            else
+                performSave(resolveSavePath(m_inputText));
+        } else if (m_inputMode == Input::SaveAs) {
+            if (e->key() == Qt::Key_Backspace)
+                m_inputText.chop(1);
+            else if (!e->text().isEmpty() && e->text().at(0).isPrint())
+                m_inputText += e->text();
+            rebuildPromptCard();
+            requestUpdate();
+        }
+        return;
+    }
+
     // Escape cancels crop mode rather than quitting, when active.
     if (m_crop.active() && e->key() == Qt::Key_Escape) {
         m_crop.setActive(false);
@@ -710,7 +826,9 @@ void ViewerWindow::keyPressEvent(QKeyEvent *e)
     } else if (action == QLatin1String("cropRatioPrev")) {
         if (m_crop.active()) { m_crop.cycleRatio(-1); requestUpdate(); }
     } else if (action == QLatin1String("save")) {
-        saveCurrent();
+        beginSaveOverwrite();
+    } else if (action == QLatin1String("saveAs")) {
+        beginSaveAs();
     } else if (action == QLatin1String("quit")) {
         QGuiApplication::quit();
     } else {

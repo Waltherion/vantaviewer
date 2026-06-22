@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2 — 2026-06-22
+
+- Info overlay is shown by default and now lists the active keybindings; toggle off
+  with `i`.
+- Save preserves the source format (chosen by the output extension):
+  - AVIF (HDR 10-bit PQ / SDR 8-bit), PNG (HDR 16-bit PQ + cICP / SDR 8-bit), and
+    SDR JPEG/WebP/TIFF/BMP via QImage. HDR PNG round-trips losslessly.
+  - JPEG-XL and HEIC encoding are not supported yet (clear error shown).
+- `Ctrl+S` now **overwrites** the current file in place (with a confirm prompt,
+  default-yes on Enter), preserving its format.
+- `Ctrl+Shift+S` is **Save as** — a minimal in-place text field to type a target
+  path; the format follows the extension you type.
+- Graceful sRGB fallback gated on the actual swapchain, so HDR shading is never used
+  on an SDR display.
+
 ## v0.1 — 2026-06-22
 
 First public release. An HDR-native image viewer for Hyprland/Wayland.
