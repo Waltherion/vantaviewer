@@ -1,11 +1,17 @@
 # vantaviewer
 
 An **HDR-native image viewer** for Hyprland/Wayland, built on the colour-management
-stack of [vantapaper](https://github.com/Waltherion/vantapaper). Ordinary viewers
-never tag their Wayland surface, so the compositor assumes SDR — lifting black to
-grey on OLED and showing HDR photos wrong. vantaviewer owns its own Vulkan
-swapchain and tags the surface via `wp-color-management-v1`, so it looks correct in
-**both HDR and SDR monitor modes, with both HDR and SDR images**.
+stack of [vantapaper](https://github.com/Waltherion/vantapaper). HDR-capable image
+viewers are rare on Linux — a lightweight one built directly for Hyprland's colour
+management more so.
+
+In HDR mode Hyprland deliberately raises the SDR black floor (it looks better on
+non-OLED panels), and untagged content goes through that lifted SDR path — so on
+OLED, blacks come up grey and HDR photos render wrong unless you correct it
+yourself. vantaviewer owns its own Vulkan swapchain and tags it via
+`wp-color-management-v1`, so its content is colour-managed directly: true 0-nit
+black on OLED and correct rendering in **both HDR and SDR monitor modes, with both
+HDR and SDR images** — without touching your compositor config.
 
 Supported formats: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG, 16-bit HDR PNG
 (cICP), and all the usual SDR formats (PNG/JPEG/WebP/TIFF/BMP) — same decoders as
@@ -36,8 +42,10 @@ is in SDR mode).
 ## Usage
 
 ```sh
-vantaviewer <image>
+vantaviewer path/to/image.avif      # or .jxl .heic .jpg .png .webp …
 ```
+
+Opens the file and lets the arrow keys page through the rest of its folder.
 
 Mouse: scroll to zoom (on the cursor), left-drag to pan, double-click to toggle
 fit ↔ 1:1.
