@@ -113,6 +113,13 @@ On Arch, the bundled `PKGBUILD` clones and builds from git:
 makepkg -si
 ```
 
+Or, without root, register it for your user only (launcher + Dolphin "Open With" +
+default-app, no `sudo`) after building:
+
+```sh
+./install-user.sh
+```
+
 Requires Qt6 (Gui/GuiPrivate/ShaderTools/Concurrent), Vulkan, wayland-protocols,
 libavif, libjxl, libheif, libultrahdr, lcms2. **Vulkan RHI is required for HDR on
 Wayland.** Build needs `qt6-shadertools`, `cmake`, `ninja`, `wayland-protocols`.
