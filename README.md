@@ -65,7 +65,10 @@ default and lists the current keybindings.
 
 In crop mode, drag the handles to resize and the interior to move; cycle aspect
 ratios (Free, Original, 16:9, 21:9, 4:3, 3:2, 1:1, 9:16, 16:10) with `x`/`z` — a
-locked ratio shows the four corner handles, freeform shows all eight.
+locked ratio shows the four corner handles, freeform shows all eight. Press `Enter`
+to apply the crop (the cut-away disappears and crop mode stays armed, so you can
+crop image after image quickly). Navigating away with unsaved crop/rotation prompts
+to save first (Enter = save, `N` = discard, `Esc` = cancel).
 
 Saving applies the current crop + rotation and **preserves the source format**,
 chosen by the output file's extension:

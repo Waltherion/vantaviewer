@@ -2,6 +2,11 @@
 
 ## v0.2 — 2026-06-22
 
+- Crop is now an edit: press Enter ("⏎ apply") to bake it into the working image so
+  the cropped-away area disappears in-app; crop mode stays armed for fast successive
+  crops. Navigating away with an unsaved crop/rotation prompts "Save changes?"
+  (Enter = save, N = discard, Esc = cancel). Saving refreshes the in-memory image
+  and the cache so paging back shows the edited result.
 - Info overlay is shown by default and now lists the active keybindings; toggle off
   with `i`.
 - Save preserves the source format (chosen by the output extension):
