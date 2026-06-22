@@ -35,7 +35,8 @@ Early but functional. What works:
 - Fully remappable keybindings (JSONC).
 
 Planned next: wide-gamut (BT.2020) export, JPEG-XL/HEIC encoding, a file-picker
-dialog, and live config reload.
+dialog, and live config reload — plus a longer wishlist in [ROADMAP.md](ROADMAP.md)
+(benchmarked against swayimg).
 
 ### On SDR / non-HDR displays
 
