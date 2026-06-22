@@ -1,5 +1,8 @@
 # vantaviewer
 
+<img width="512" height="512" alt="VantaViewer-512x512" src="https://github.com/user-attachments/assets/bb2de155-cadc-4a0d-9b81-9928822d1df0" />
+
+
 An **HDR-native image viewer** for Hyprland/Wayland, built on the colour-management
 stack of [vantapaper](https://github.com/Waltherion/vantapaper). HDR-capable image
 viewers are rare on Linux — a lightweight one built directly for Hyprland's colour
