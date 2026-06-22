@@ -38,6 +38,12 @@ public:
     // Keep these paths (current + neighbours) pinned; evict others beyond capacity.
     void setHot(const QStringList &paths);
 
+    // Drop any cached/in-flight version of a path (e.g. its file changed on disk).
+    void invalidate(const QString &path);
+    // Replace the cached image for a path with a known full-resolution result (e.g.
+    // after saving an edit), so navigating back shows the new content immediately.
+    void replace(const QString &path, std::shared_ptr<const HdrImage> img);
+
 signals:
     void ready(const QString &path);
 

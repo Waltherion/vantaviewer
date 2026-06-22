@@ -20,6 +20,7 @@
 #include <rhi/qshader.h>
 
 #include "image_encoder.h"
+#include "image_ops.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,8 +47,10 @@ ViewerWindow::ViewerWindow(QVulkanInstance *inst, bool hdrMode)
     // place (keep zoom/pan/rotation); otherwise it just sits warm in the cache.
     connect(&m_loader, &ImageLoader::ready, this, [this](const QString &path) {
         if (path == m_currentPath) {
-            if (auto img = m_loader.cached(path))
+            if (auto img = m_loader.cached(path)) {
                 setImage(img, /*resetView=*/false);
+                render(); // async upgrade: paint now (not input-driven)
+            }
         }
     });
 
@@ -60,7 +63,7 @@ ViewerWindow::ViewerWindow(QVulkanInstance *inst, bool hdrMode)
     m_toastTimer.setSingleShot(true);
     connect(&m_toastTimer, &QTimer::timeout, this, [this]() {
         m_toastVisible = false;
-        requestUpdate();
+        render(); // not input-driven: paint directly (Wayland frame-callback may not be pending)
     });
 }
 
@@ -84,6 +87,7 @@ bool ViewerWindow::showPath(const QString &path)
     if (path.isEmpty())
         return false;
     m_currentPath = path;
+    m_edited = false; // a freshly loaded image has no unsaved edits
 
     // Show the best we have immediately; if nothing is cached, decode synchronously
     // (the very first image, and any cold neighbour) so something appears at once.
@@ -104,8 +108,44 @@ void ViewerWindow::navigate(int dir)
 {
     if (m_playlist.isEmpty())
         return;
+    if (m_edited && m_inputMode == Input::None) {
+        // Offer to save the crop/rotation before leaving this image.
+        m_inputMode = Input::ConfirmSaveNav;
+        m_pendingNav = dir;
+        rebuildPromptCard();
+        requestUpdate();
+        return;
+    }
+    doNavigate(dir);
+}
+
+void ViewerWindow::doNavigate(int dir)
+{
     const QString path = dir >= 0 ? m_playlist.next() : m_playlist.previous();
     showPath(path);
+}
+
+void ViewerWindow::commitCrop()
+{
+    if (!m_crop.active() || !m_image || !m_image->valid())
+        return;
+    const QRectF r = m_crop.rect();
+    const QRect crop(qRound(r.left()), qRound(r.top()), qRound(r.width()), qRound(r.height()));
+    if (crop.width() >= m_image->w && crop.height() >= m_image->h)
+        return; // nothing to cut (crop is the whole image)
+
+    auto baked = std::make_shared<HdrImage>(imageops::cropRotate(*m_image, crop, 0));
+    if (!baked->valid())
+        return;
+    m_image = baked;
+    m_incomingDirty = true;
+    m_view.setImageSize(QSize(baked->w, baked->h));
+    m_view.fit();                            // frame the cropped result (rotation kept)
+    m_crop.begin(QSize(baked->w, baked->h)); // re-arm full rect, stay in crop mode
+    m_edited = true;
+    if (m_infoVisible)
+        rebuildInfoPanel();
+    requestUpdate();
 }
 
 void ViewerWindow::updateHotSet()
@@ -129,7 +169,7 @@ void ViewerWindow::setHdrMode(bool hdr)
     }
     if (m_infoVisible)
         rebuildInfoPanel(); // the "Monitor: HDR/SDR" line changes
-    requestUpdate();
+    render(); // live HDR toggle is not input-driven: paint directly
 }
 
 void ViewerWindow::setImage(std::shared_ptr<const HdrImage> image, bool resetView)
@@ -416,7 +456,7 @@ void ViewerWindow::render()
         const double maxy = std::max({ p0.y(), p1.y(), p2.y(), p3.y() });
         const QRectF screenRect(minx, miny, maxx - minx, maxy - miny);
         const bool freeform = (m_crop.ratio() == CropState::Ratio::Free);
-        const QString label = QStringLiteral("%1  ·  %2×%3").arg(m_crop.ratioName())
+        const QString label = QStringLiteral("%1  ·  %2×%3  ·  ⏎ apply").arg(m_crop.ratioName())
                                   .arg(qRound(cr.width())).arg(qRound(cr.height()));
         const QImage chrome = m_cropOv.build(outputSize, screenRect, freeform, label,
                                              devicePixelRatio());
@@ -639,46 +679,74 @@ QString ViewerWindow::resolveSavePath(const QString &typed) const
     return QFileInfo(t).absoluteFilePath();
 }
 
-void ViewerWindow::performSave(const QString &path)
+void ViewerWindow::performSave(const QString &path, bool updateCurrent)
 {
     m_inputMode = Input::None;
     m_toastVisible = false;
-    if (m_saving || path.isEmpty())
-        return;
-    auto img = m_loader.loadSync(m_currentPath); // guaranteed full-resolution
-    if (!img || !img->valid()) {
-        showToast(QStringLiteral("Cannot save: decode failed"));
+    if (m_saving || path.isEmpty() || !m_image || !m_image->valid()) {
+        m_pendingNav = 0;
         return;
     }
 
-    QRect crop; // null == whole image
+    // Bake crop (if active) + view rotation into the image to be written.
+    QRect crop;
     if (m_crop.active()) {
         const QRectF r = m_crop.rect();
         crop = QRect(qRound(r.left()), qRound(r.top()), qRound(r.width()), qRound(r.height()));
     }
-    const int rot = m_view.rotation();
+    auto applied = std::make_shared<HdrImage>(imageops::cropRotate(*m_image, crop, m_view.rotation()));
+    if (!applied->valid()) {
+        showToast(QStringLiteral("Cannot save: empty result"));
+        m_pendingNav = 0;
+        return;
+    }
 
     m_saving = true;
     showToast(QStringLiteral("Saving…"));
 
     const QString cur = m_currentPath;
     auto *watcher = new QFutureWatcher<encoder::Result>(this);
-    connect(watcher, &QFutureWatcher<encoder::Result>::finished, this, [this, watcher, path, cur]() {
+    connect(watcher, &QFutureWatcher<encoder::Result>::finished, this,
+            [this, watcher, path, cur, applied, updateCurrent]() {
         const encoder::Result res = watcher->result();
         watcher->deleteLater();
         m_saving = false;
-        if (res.ok) {
-            showToast(QStringLiteral("Saved %1").arg(QFileInfo(res.message).fileName()));
-            // Rescan so a newly written sibling shows up in navigation.
-            m_playlist.reload();
-            m_playlist.setCurrentPath(cur);
-            updateHotSet();
-        } else {
+        if (!res.ok) {
             showToast(QStringLiteral("Save failed: %1").arg(res.message));
+            m_pendingNav = 0;
+            return;
         }
+        showToast(QStringLiteral("Saved %1").arg(QFileInfo(res.message).fileName()));
+
+        if (updateCurrent && cur == m_currentPath) {
+            // The written, baked image becomes the working image + cache entry.
+            m_image = applied;
+            m_incomingDirty = true;
+            m_view.setImageSize(QSize(applied->w, applied->h));
+            m_view.setRotation(0);
+            m_view.fit();
+            if (m_crop.active())
+                m_crop.begin(QSize(applied->w, applied->h));
+            m_loader.replace(cur, applied);
+            m_edited = false;
+            if (m_infoVisible)
+                rebuildInfoPanel();
+        } else {
+            // Save-as: a new sibling may have appeared; refresh the playlist.
+            m_playlist.reload();
+            m_playlist.setCurrentPath(m_currentPath);
+            updateHotSet();
+        }
+
+        if (m_pendingNav != 0) {
+            const int d = m_pendingNav;
+            m_pendingNav = 0;
+            doNavigate(d);
+        }
+        render(); // not input-driven: force a paint so the result/navigation shows now
     });
-    watcher->setFuture(QtConcurrent::run([img, path, crop, rot]() {
-        return encoder::encode(path, *img, crop, rot);
+    watcher->setFuture(QtConcurrent::run([applied, path]() {
+        return encoder::encode(path, *applied, QRect(), 0);
     }));
 }
 
@@ -688,6 +756,9 @@ void ViewerWindow::rebuildPromptCard()
     if (m_inputMode == Input::ConfirmOverwrite) {
         label = QStringLiteral("Overwrite %1 ?    Enter = yes    Esc = no")
                     .arg(QFileInfo(m_inputTarget).fileName());
+    } else if (m_inputMode == Input::ConfirmSaveNav) {
+        label = QStringLiteral("Save changes to %1 ?    Enter = save    N = discard    Esc = cancel")
+                    .arg(QFileInfo(m_currentPath).fileName());
     } else if (m_inputMode == Input::SaveAs) {
         label = QStringLiteral("Save as:  %1▏    Enter = save    Esc = cancel")
                     .arg(m_inputText);
@@ -755,29 +826,50 @@ void ViewerWindow::keyPressEvent(QKeyEvent *e)
 {
     // Modal save prompt swallows all keys until answered.
     if (m_inputMode != Input::None) {
+        const bool enter = (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter);
         if (e->key() == Qt::Key_Escape) {
+            m_pendingNav = 0;
             cancelPrompt();
-        } else if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
-            if (m_inputMode == Input::ConfirmOverwrite)
-                performSave(m_inputTarget);
-            else
-                performSave(resolveSavePath(m_inputText));
+        } else if (m_inputMode == Input::ConfirmOverwrite) {
+            if (enter) performSave(m_inputTarget, /*updateCurrent=*/true);
+        } else if (m_inputMode == Input::ConfirmSaveNav) {
+            if (enter) {
+                performSave(m_currentPath, /*updateCurrent=*/true); // then navigates (m_pendingNav)
+            } else if (e->key() == Qt::Key_N) {
+                const int d = m_pendingNav;
+                m_pendingNav = 0;
+                m_edited = false;
+                m_inputMode = Input::None;
+                m_toastVisible = false;
+                doNavigate(d);
+            }
         } else if (m_inputMode == Input::SaveAs) {
-            if (e->key() == Qt::Key_Backspace)
+            if (enter) {
+                performSave(resolveSavePath(m_inputText), /*updateCurrent=*/false);
+            } else if (e->key() == Qt::Key_Backspace) {
                 m_inputText.chop(1);
-            else if (!e->text().isEmpty() && e->text().at(0).isPrint())
+                rebuildPromptCard();
+                requestUpdate();
+            } else if (!e->text().isEmpty() && e->text().at(0).isPrint()) {
                 m_inputText += e->text();
-            rebuildPromptCard();
-            requestUpdate();
+                rebuildPromptCard();
+                requestUpdate();
+            }
         }
         return;
     }
 
-    // Escape cancels crop mode rather than quitting, when active.
-    if (m_crop.active() && e->key() == Qt::Key_Escape) {
-        m_crop.setActive(false);
-        requestUpdate();
-        return;
+    // In crop mode: Enter applies the crop (bakes it in), Escape leaves crop mode.
+    if (m_crop.active()) {
+        if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+            commitCrop();
+            return;
+        }
+        if (e->key() == Qt::Key_Escape) {
+            m_crop.setActive(false);
+            requestUpdate();
+            return;
+        }
     }
 
     const QPointF centre(width() * devicePixelRatio() * 0.5,
@@ -795,12 +887,15 @@ void ViewerWindow::keyPressEvent(QKeyEvent *e)
         requestUpdate();
     } else if (action == QLatin1String("rotateCW")) {
         m_view.rotateBy(1);
+        m_edited = true;
         requestUpdate();
     } else if (action == QLatin1String("rotateCCW")) {
         m_view.rotateBy(-1);
+        m_edited = true;
         requestUpdate();
     } else if (action == QLatin1String("rotate180")) {
         m_view.rotateBy(2);
+        m_edited = true;
         requestUpdate();
     } else if (action == QLatin1String("next")) {
         navigate(+1);

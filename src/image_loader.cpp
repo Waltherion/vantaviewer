@@ -70,6 +70,22 @@ void ImageLoader::setHot(const QStringList &paths)
     evict();
 }
 
+void ImageLoader::invalidate(const QString &path)
+{
+    m_cache.remove(path);
+    m_lru.removeAll(path);
+    // In-flight decodes for the old file are ignored on completion via the cache check.
+    m_inFlightFull.remove(path);
+    m_inFlightCap.remove(path);
+}
+
+void ImageLoader::replace(const QString &path, std::shared_ptr<const HdrImage> img)
+{
+    if (!img || !img->valid())
+        return;
+    insert(path, std::move(img), /*full=*/true);
+}
+
 void ImageLoader::insert(const QString &path, std::shared_ptr<const HdrImage> img, bool full)
 {
     m_cache.insert(path, Entry{ std::move(img), full });

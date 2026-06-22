@@ -17,7 +17,7 @@ QImage CropOverlay::build(const QSize &windowDev, const QRectF &screenRect,
     p.setRenderHint(QPainter::Antialiasing, true);
 
     // Dim everything, then punch the crop area back to transparent.
-    p.fillRect(QRectF(QPointF(0, 0), QSizeF(windowDev)), QColor(0, 0, 0, 140));
+    p.fillRect(QRectF(QPointF(0, 0), QSizeF(windowDev)), QColor(0, 0, 0, 178));
     p.setCompositionMode(QPainter::CompositionMode_Clear);
     p.fillRect(screenRect, Qt::transparent);
     p.setCompositionMode(QPainter::CompositionMode_SourceOver);

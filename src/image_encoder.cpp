@@ -1,4 +1,5 @@
 #include "image_encoder.h"
+#include "image_ops.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -32,50 +33,6 @@ float srgbEncode(float c)
 {
     c = std::clamp(c, 0.0f, 1.0f);
     return c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
-}
-
-// Crop (image px) then rotate clockwise by `rot` quadrants. Returns tightly packed
-// fp16 RGBA at the final dimensions.
-std::vector<uint16_t> cropRotate(const HdrImage &img, QRect crop, int rot,
-                                 int &outW, int &outH)
-{
-    QRect full(0, 0, img.w, img.h);
-    if (crop.isNull() || !crop.isValid())
-        crop = full;
-    crop = crop.intersected(full);
-    if (crop.isEmpty())
-        crop = full;
-
-    const int cw = crop.width();
-    const int ch = crop.height();
-    const qfloat16 *src = reinterpret_cast<const qfloat16 *>(img.rgba16f.data());
-
-    rot &= 3;
-    outW = (rot & 1) ? ch : cw;
-    outH = (rot & 1) ? cw : ch;
-    std::vector<uint16_t> out(size_t(outW) * outH * 4);
-    qfloat16 *dst = reinterpret_cast<qfloat16 *>(out.data());
-
-    for (int y = 0; y < ch; ++y) {
-        const int sy = crop.top() + y;
-        for (int x = 0; x < cw; ++x) {
-            const int sx = crop.left() + x;
-            const size_t s = (size_t(sy) * img.w + sx) * 4;
-            int dx, dy;
-            switch (rot) {
-            case 1: dx = ch - 1 - y; dy = x;          break; // 90 CW
-            case 2: dx = cw - 1 - x; dy = ch - 1 - y; break; // 180
-            case 3: dx = y;          dy = cw - 1 - x; break; // 270 CW
-            default: dx = x;         dy = y;          break;
-            }
-            const size_t d = (size_t(dy) * outW + dx) * 4;
-            dst[d + 0] = src[s + 0];
-            dst[d + 1] = src[s + 1];
-            dst[d + 2] = src[s + 2];
-            dst[d + 3] = src[s + 3];
-        }
-    }
-    return out;
 }
 
 uint32_t pngCrc(const uint8_t *buf, size_t len)
@@ -306,9 +263,11 @@ Result encode(const QString &outPath, const HdrImage &img,
         return { false, QStringLiteral("encoding to .%1 is not supported yet").arg(ext) };
     }
 
-    int w = 0, h = 0;
-    const std::vector<uint16_t> px = cropRotate(img, crop, rotationQuadrant, w, h);
-    const qfloat16 *p = reinterpret_cast<const qfloat16 *>(px.data());
+    const HdrImage edited = imageops::cropRotate(img, crop, rotationQuadrant);
+    if (!edited.valid())
+        return { false, QStringLiteral("crop/rotate produced an empty image") };
+    const int w = edited.w, h = edited.h;
+    const qfloat16 *p = reinterpret_cast<const qfloat16 *>(edited.rgba16f.data());
 
     if (ext == QLatin1String("avif"))
         return encodeAvifBuf(outPath, p, w, h, img.hdr, quality);

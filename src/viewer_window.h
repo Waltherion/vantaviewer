@@ -67,7 +67,10 @@ private:
     // its format); Ctrl+Shift+S opens an in-place text field to type a target path.
     void beginSaveOverwrite();
     void beginSaveAs();
-    void performSave(const QString &path); // async encode + toast
+    // Async encode of the working image (crop + rotation baked) to path, then toast.
+    // updateCurrent=true bakes the result into the view + cache (overwrite); false is
+    // a pure export to another file (save-as).
+    void performSave(const QString &path, bool updateCurrent);
     void rebuildPromptCard();              // (re)render the modal card
     void cancelPrompt();
     QString resolveSavePath(const QString &typed) const;
@@ -77,8 +80,10 @@ private:
     // new picture; false keeps zoom/pan/rotation for an in-place full-res upgrade.
     void setImage(std::shared_ptr<const HdrImage> image, bool resetView);
     bool showPath(const QString &path); // current playlist item -> screen
-    void navigate(int dir);             // +1 next, -1 previous
+    void navigate(int dir);             // +1 next, -1 previous (prompts if edited)
+    void doNavigate(int dir);           // actually move (after any save/discard)
     void updateHotSet();                // pin current + neighbours in the loader
+    void commitCrop();                  // bake the active crop into the working image
 
     QVulkanInstance *m_inst = nullptr;
 
@@ -134,10 +139,13 @@ private:
     QTimer m_toastTimer;
     bool m_saving = false;       // an async export is in flight
 
-    enum class Input { None, ConfirmOverwrite, SaveAs };
+    enum class Input { None, ConfirmOverwrite, SaveAs, ConfirmSaveNav };
     Input m_inputMode = Input::None;
     QString m_inputText;   // editable path while in SaveAs
     QString m_inputTarget; // path to overwrite while in ConfirmOverwrite
+
+    bool m_edited = false; // working image has unsaved crop/rotation edits
+    int m_pendingNav = 0;  // navigation queued behind a save (set with ConfirmSaveNav)
 
     float m_scale = 2.5375f; // 203/80
 

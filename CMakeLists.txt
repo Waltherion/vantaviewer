@@ -58,6 +58,7 @@ add_executable(vantaviewer
     src/info_overlay.cpp
     src/crop_state.cpp
     src/crop_overlay.cpp
+    src/image_ops.cpp
     src/image_encoder.cpp
     src/cm_tagging.cpp
     src/hdr_image.cpp
