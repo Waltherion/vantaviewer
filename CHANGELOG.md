@@ -10,6 +10,9 @@
 - **More input formats.** Added GIF, SVG, TGA, ICO, QOI, JP2, PNM (ppm/pgm/pbm),
   XPM/XBM, PCX and PSD (decoded via Qt + kimageformats), on top of the existing
   AVIF/JXL/HEIC/PNG/JPEG/WebP/TIFF/BMP. `.desktop` MIME types updated to match.
+- **True-HDR float formats.** OpenEXR, Radiance `.hdr` and PFM now decode as real HDR
+  (scene-linear float taken directly, not SDR-clamped) — verified preserving linear
+  values incl. highlights above 1.0.
 
 ## v0.2 — 2026-06-22
 

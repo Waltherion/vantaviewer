@@ -546,6 +546,38 @@ HdrImage decodeSdrImage(const QString &path)
         return result;
     }
 
+    // Scene-linear float formats (OpenEXR, Radiance .hdr, PFM) decode to a float
+    // QImage. Take the linear values directly as true HDR (1.0 = scene white ~= 203
+    // nits, our fp16 convention); BT.709 primaries. No transfer/cICP handling needed.
+    {
+        const QImage::Format f = img.format();
+        if (f == QImage::Format_RGBA16FPx4 || f == QImage::Format_RGBX16FPx4
+            || f == QImage::Format_RGBA32FPx4 || f == QImage::Format_RGBX32FPx4) {
+            img = img.convertToFormat(QImage::Format_RGBA16FPx4);
+            result.w = img.width();
+            result.h = img.height();
+            result.hdr = true;
+            result.kind = HdrImage::HdrKind::LinearHdr;
+            result.bt2020 = false;
+            result.rgba16f.resize(size_t(result.w) * result.h * 4);
+            qfloat16 *dst = reinterpret_cast<qfloat16 *>(result.rgba16f.data());
+            const int w = result.w;
+            parallelRows(result.h, [&, w](int y) {
+                const qfloat16 *line = reinterpret_cast<const qfloat16 *>(img.constScanLine(y));
+                for (int x = 0; x < w; ++x) {
+                    const size_t o = (size_t(y) * w + x) * 4;
+                    dst[o + 0] = qfloat16(std::max(float(line[x * 4 + 0]), 0.0f));
+                    dst[o + 1] = qfloat16(std::max(float(line[x * 4 + 1]), 0.0f));
+                    dst[o + 2] = qfloat16(std::max(float(line[x * 4 + 2]), 0.0f));
+                    dst[o + 3] = qfloat16(std::max(float(line[x * 4 + 3]), 0.0f));
+                }
+            });
+            std::fprintf(stderr, "vantaviewer: loaded HDR float image %dx%d (scene-linear)\n",
+                         result.w, result.h);
+            return result;
+        }
+    }
+
     // A 16-bit PNG/TIFF may carry an HDR transfer either in an embedded ICC profile
     // (e.g. "Rec. 2020 PQ") or in a PNG cICP chunk. Detect either and treat as HDR.
     Tf tf = Tf::SRGB;

@@ -7,5 +7,5 @@ Exec=vantaviewer %f
 Icon=vantaviewer
 Terminal=false
 Categories=Graphics;Viewer;2DGraphics;
-MimeType=image/png;image/jpeg;image/avif;image/jxl;image/heic;image/heif;image/webp;image/tiff;image/bmp;image/gif;image/svg+xml;image/x-tga;image/x-icon;image/jp2;image/x-qoi;image/x-portable-pixmap;image/x-portable-graymap;image/x-portable-bitmap;image/x-pcx;image/vnd.adobe.photoshop;
+MimeType=image/png;image/jpeg;image/avif;image/jxl;image/heic;image/heif;image/webp;image/tiff;image/bmp;image/gif;image/svg+xml;image/x-tga;image/x-icon;image/jp2;image/x-qoi;image/x-portable-pixmap;image/x-portable-graymap;image/x-portable-bitmap;image/x-pcx;image/vnd.adobe.photoshop;image/x-exr;image/vnd.radiance;image/x-pfm;
 StartupWMClass=vantaviewer

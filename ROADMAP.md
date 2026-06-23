@@ -18,8 +18,8 @@ lightweight SDR viewer); the goal is to *selectively* adopt what fits, not to cl
 ## Viewing
 - 🟢 ~~**More SDR formats**~~ — done in v0.3: GIF, SVG, TGA, ICO, QOI, JP2, PNM,
   XPM/XBM, PCX, PSD via Qt + kimageformats.
-- 🟡 **HDR float formats** — OpenEXR and Radiance .hdr decoded as *true HDR* (linear
-  float), not SDR-clamped. The kimg plugins read them but our path treats them as SDR.
+- ✅ ~~**HDR float formats**~~ — done in v0.3: OpenEXR, Radiance `.hdr` and PFM decode
+  as true HDR (scene-linear float). Possible follow-up: exposure control.
 - 🟡 **RAW** (libraw via kimg_raw) — camera raws decode but need a sensible pipeline.
 - 🔴 **Animation playback** — GIF, animated WebP, APNG (multi-frame decode + loop).
 - 🟢 **Transparency checkerboard** background for images with alpha (toggle).

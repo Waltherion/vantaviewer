@@ -16,10 +16,10 @@ yourself. vantaviewer owns its own Vulkan swapchain and tags it via
 black on OLED and correct rendering in **both HDR and SDR monitor modes, with both
 HDR and SDR images** — without touching your compositor config.
 
-Supported formats: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG and 16-bit HDR
-PNG (cICP) via the HDR-aware decoders (`src/hdr_image.cpp`, shared with vantapaper),
-plus the usual SDR formats via Qt + kimageformats (PNG, JPEG, WebP, TIFF, BMP, GIF,
-SVG, TGA, ICO, QOI, JP2, PNM, XPM/XBM, PCX, PSD).
+Supported formats — HDR: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG, 16-bit
+HDR PNG (cICP), and scene-linear **OpenEXR / Radiance `.hdr` / PFM**. SDR (via Qt +
+kimageformats): PNG, JPEG, WebP, TIFF, BMP, GIF, SVG, TGA, ICO, QOI, JP2, PNM,
+XPM/XBM, PCX, PSD.
 
 ## Status — v0.3
 
@@ -35,9 +35,8 @@ Early but functional. What works:
   in place (`Ctrl+S`) or save as (`Ctrl+Shift+S`).
 - Fully remappable keybindings (JSONC).
 
-Planned next: JPEG-XL/HEIC encoding, true-HDR EXR/Radiance decode, a file-picker
-dialog, and live config reload — plus a longer wishlist in [ROADMAP.md](ROADMAP.md)
-(benchmarked against swayimg).
+Planned next: JPEG-XL/HEIC encoding, a file-picker dialog, and live config reload —
+plus a longer wishlist in [ROADMAP.md](ROADMAP.md) (benchmarked against swayimg).
 
 ### On SDR / non-HDR displays
 

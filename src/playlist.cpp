@@ -7,6 +7,8 @@ static const QStringList kExtensions = {
     // HDR-aware decoders
     QStringLiteral("avif"), QStringLiteral("jxl"),  QStringLiteral("heic"),
     QStringLiteral("heif"),
+    // scene-linear float HDR (OpenEXR, Radiance, PFM)
+    QStringLiteral("exr"),  QStringLiteral("hdr"),  QStringLiteral("pfm"),
     // common SDR (Qt + kimageformats plugins)
     QStringLiteral("png"),  QStringLiteral("jpg"),  QStringLiteral("jpeg"),
     QStringLiteral("webp"), QStringLiteral("tiff"), QStringLiteral("tif"),
