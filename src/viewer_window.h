@@ -14,6 +14,7 @@
 #include "info_overlay.h"
 #include "crop_state.h"
 #include "crop_overlay.h"
+#include "config.h"
 
 #include <QImage>
 #include <QTimer>
@@ -31,7 +32,7 @@ class ViewerWindow : public QWindow
 {
     Q_OBJECT
 public:
-    ViewerWindow(QVulkanInstance *inst, bool hdrMode);
+    ViewerWindow(QVulkanInstance *inst, bool hdrMode, const Config &cfg);
     ~ViewerWindow() override;
 
     // Open a file: load its directory as the playlist, position on it, show it, and
@@ -86,6 +87,9 @@ private:
     void commitCrop();                  // bake the active crop into the working image
 
     QVulkanInstance *m_inst = nullptr;
+    Config m_cfg;
+    bool m_startFullscreenPending = false;
+    float m_bg[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // letterbox bg: linear rgb + alpha
 
     // Declaration order matters: m_rhi must outlive the resources below.
     std::unique_ptr<QRhi> m_rhi;

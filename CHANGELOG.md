@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5 — 2026-06-23
+
+- **Appearance config** at `~/.config/vantaviewer/config.jsonc` (written with defaults
+  on first run; `config.default.jsonc` in the repo for reference):
+  - `background`: `"black"` (true 0 nits), `"transparent"` (see the wallpaper through
+    the letterbox), or a hex colour.
+  - overlay theming — `accent`, `text`, `overlayOpacity`, `font`, `fontSize` applied to
+    the info card, keys bar, crop chrome and toasts.
+  - `infoOverlay` (default on/off), `windowWidth`/`windowHeight`, `fullscreen`.
+
 ## v0.4 — 2026-06-23
 
 - **JPEG-XL and HEIC encoding.** Save / overwrite / save-as now support `.jxl`

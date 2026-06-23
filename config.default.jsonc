@@ -1,0 +1,22 @@
+{
+  // vantaviewer appearance + behaviour. Copied to ~/.config/vantaviewer/config.jsonc
+  // on first run; edit that file (this one in the repo is just the reference default).
+  // Keybindings live separately in keybindings.jsonc.
+
+  // Area behind / around the image: "black" (true 0 nits on OLED), "transparent"
+  // (see the wallpaper through letterbox bars), or a hex colour like "#101014".
+  "background": "black",
+
+  // Overlay theming (info card, keys bar, crop caption, toasts).
+  "accent": "#96beff",      // headers / highlights
+  "text": "#ebebeb",        // body text
+  "overlayOpacity": 0.70,   // 0..1 — card background opacity
+  "font": "",               // overlay font family ("" = system default)
+  "fontSize": 11.0,         // overlay base point size
+
+  // Behaviour.
+  "infoOverlay": true,      // show the info card + keys bar by default
+  "windowWidth": 1280,
+  "windowHeight": 800,
+  "fullscreen": false
+}

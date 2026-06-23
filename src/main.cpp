@@ -8,6 +8,7 @@
 #include <rhi/qrhi.h>
 
 #include "viewer_window.h"
+#include "config.h"
 
 #include <cstdio>
 
@@ -59,8 +60,9 @@ int main(int argc, char **argv)
         qFatal("vantaviewer: failed to create Vulkan instance");
 
     const bool hdr = focusedMonitorIsHdr();
+    const Config cfg = Config::load();
 
-    ViewerWindow w(&inst, hdr);
+    ViewerWindow w(&inst, hdr, cfg);
     if (!w.openPath(path)) {
         std::fprintf(stderr, "vantaviewer: could not decode %s\n", qPrintable(path));
         return 1;

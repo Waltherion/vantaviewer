@@ -45,9 +45,10 @@ lightweight SDR viewer); the goal is to *selectively* adopt what fits, not to cl
 - 🟡 **EXIF display** (camera / exposure / date / GPS) in the info overlay.
 
 ## Config / extensibility
-- 🟢 **Live config reload** — re-read keybindings without restarting.
+- ✅ ~~**Theming in config**~~ — done in v0.5: background, overlay accent/text/opacity/
+  font, window + info defaults via `config.jsonc`. Follow-up: per-info-field selection.
+- 🟢 **Live config reload** — re-read config/keybindings without restarting.
 - 🟡 **Exec arbitrary commands** on a keypress (delete / copy / run a script).
-- 🟡 **Theming in config** — overlay colours, fonts, which info fields to show.
 
 ## Packaging
 - 🟢 **AUR package** once the AUR malware-lockdown lifts.

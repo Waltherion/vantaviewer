@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(vantaviewer VERSION 0.4.0 LANGUAGES C CXX)
+project(vantaviewer VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,6 +55,7 @@ add_executable(vantaviewer
     src/playlist.cpp
     src/image_loader.cpp
     src/hdr_monitor.cpp
+    src/config.cpp
     src/info_overlay.cpp
     src/crop_state.cpp
     src/crop_overlay.cpp

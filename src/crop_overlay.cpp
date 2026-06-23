@@ -6,7 +6,8 @@
 #include <QFontMetrics>
 
 QImage CropOverlay::build(const QSize &windowDev, const QRectF &screenRect,
-                          bool freeform, const QString &label, qreal dpr) const
+                          bool freeform, const QString &label,
+                          const OverlayStyle &style, qreal dpr) const
 {
     QImage img(windowDev, QImage::Format_RGBA8888);
     img.fill(Qt::transparent);
@@ -33,8 +34,9 @@ QImage CropOverlay::build(const QSize &windowDev, const QRectF &screenRect,
         p.drawLine(QPointF(screenRect.left(), y), QPointF(screenRect.right(), y));
     }
 
-    // Border.
-    QPen border(QColor(255, 255, 255, 230));
+    // Border (accent).
+    QColor borderCol = style.accent; borderCol.setAlpha(235);
+    QPen border(borderCol);
     border.setWidthF(1.6 * dpr);
     p.setPen(border);
     p.setBrush(Qt::NoBrush);
@@ -55,14 +57,16 @@ QImage CropOverlay::build(const QSize &windowDev, const QRectF &screenRect,
     QPen handleEdge(QColor(0, 0, 0, 180));
     handleEdge.setWidthF(1.0 * dpr);
     p.setPen(handleEdge);
-    p.setBrush(QColor(255, 255, 255, 245));
+    QColor handleFill = style.accent; handleFill.setAlpha(255);
+    p.setBrush(handleFill);
     for (const QPointF &c : pts)
         p.drawRect(QRectF(c.x() - hs, c.y() - hs, hs * 2, hs * 2));
 
     // Caption (ratio + crop size) just inside the top-left corner of the crop.
     if (!label.isEmpty()) {
         QFont f = p.font();
-        f.setPointSizeF(10.0 * dpr);
+        if (!style.fontFamily.isEmpty()) f.setFamily(style.fontFamily);
+        f.setPointSizeF((style.fontSize - 1.0) * dpr);
         p.setFont(f);
         const QFontMetrics fm(f);
         const int tw = fm.horizontalAdvance(label);
@@ -71,9 +75,9 @@ QImage CropOverlay::build(const QSize &windowDev, const QRectF &screenRect,
         QRectF box(screenRect.left() + 4 * dpr, screenRect.top() + 4 * dpr,
                    tw + pad * 2, th + pad);
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 160));
+        p.setBrush(QColor(0, 0, 0, int(style.cardOpacity * 230)));
         p.drawRoundedRect(box, 4 * dpr, 4 * dpr);
-        p.setPen(QColor(255, 255, 255, 235));
+        p.setPen(style.text);
         p.drawText(box.adjusted(pad, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, label);
     }
 

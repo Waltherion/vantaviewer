@@ -24,6 +24,7 @@ layout(std140, binding = 0) uniform U {
     float exposure;  // linear multiplier (2^EV); 1.0 = no change
     float _pad1;
     float _pad2;
+    vec4 bgColor;    // letterbox background: linear rgb + alpha
 } u;
 
 // Linear BT.2020 -> linear BT.709 primaries.
@@ -66,9 +67,11 @@ void main()
     // window-uv -> display-uv (the image as the user sees it, after rotation).
     vec2 duv = (v_uv - 0.5) * u.uvScale + 0.5 + u.uvOffset;
 
-    // Letterbox / pillarbox: anything outside the image is true black.
+    // Letterbox / pillarbox: anything outside the image gets the configured background
+    // (linear rgb + alpha), encoded for the current surface mode.
     if (duv.x < 0.0 || duv.x > 1.0 || duv.y < 0.0 || duv.y > 1.0) {
-        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        if (u.sdr > 0.5) fragColor = vec4(srgbEncode(u.bgColor.rgb), u.bgColor.a);
+        else             fragColor = vec4(u.bgColor.rgb * u.scale, u.bgColor.a);
         return;
     }
 

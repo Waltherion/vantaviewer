@@ -7,7 +7,8 @@
 #include <QLocale>
 
 QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitorHdr,
-                          int indexInFolder, int folderCount, float exposureEv, qreal dpr) const
+                          int indexInFolder, int folderCount, float exposureEv,
+                          const OverlayStyle &style, qreal dpr) const
 {
     const QFileInfo fi(path);
     const QString ext = fi.suffix().toUpper();
@@ -30,9 +31,12 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
 
     const int pad = 14;
     const int lineGap = 6;
-    QFont font;       font.setPointSizeF(11.0);
+    QFont font;       font.setPointSizeF(style.fontSize);
+    if (!style.fontFamily.isEmpty()) font.setFamily(style.fontFamily);
     QFont titleFont = font; titleFont.setBold(true);
     const QFontMetrics fm(font), fmTitle(titleFont);
+    const QColor cardBg(0, 0, 0, int(style.cardOpacity * 255));
+    QColor dim = style.text; dim.setAlpha(205);
 
     int textW = 0, textH = 0;
     for (int i = 0; i < lines.size(); ++i) {
@@ -51,7 +55,7 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0, 0, 0, 180));
+    p.setBrush(cardBg);
     p.drawRoundedRect(QRectF(0, 0, w, h), 10, 10);
 
     int y = pad;
@@ -59,7 +63,7 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
         const QFont &f = (i == 0) ? titleFont : font;
         const QFontMetrics &m = (i == 0) ? fmTitle : fm;
         p.setFont(f);
-        p.setPen(i == 0 ? QColor(255, 255, 255) : QColor(210, 210, 210));
+        p.setPen(i == 0 ? style.text : dim);
         y += m.ascent();
         p.drawText(pad, y, lines.at(i));
         y += m.height() - m.ascent() + lineGap;
@@ -69,12 +73,13 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
 }
 
 QImage InfoOverlay::buildKeysBar(const QList<QPair<QString, QString>> &keys,
-                                 int columns, qreal dpr) const
+                                 int columns, const OverlayStyle &style, qreal dpr) const
 {
     if (keys.isEmpty() || columns < 1)
         return QImage();
 
-    QFont keyFont;   keyFont.setPointSizeF(9.5);
+    QFont keyFont;   keyFont.setPointSizeF(style.fontSize - 1.5);
+    if (!style.fontFamily.isEmpty()) keyFont.setFamily(style.fontFamily);
     const QFontMetrics fmKey(keyFont);
     const int keyGap = 10;   // between a key chord and its label
     const int colGap = 26;   // between columns
@@ -107,17 +112,19 @@ QImage InfoOverlay::buildKeysBar(const QList<QPair<QString, QString>> &keys,
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0, 0, 0, 175));
+    p.setBrush(QColor(0, 0, 0, int(style.cardOpacity * 255)));
     p.drawRoundedRect(QRectF(0, 0, w, h), 10, 10);
 
+    QColor keyCol = style.accent;            // the chord, in the accent colour
+    QColor labelCol = style.text; labelCol.setAlpha(180);
     p.setFont(keyFont);
     for (int i = 0; i < keys.size(); ++i) {
         const int c = i / rows;
         const int r = i % rows;
         const int baseY = pad + r * rowH + fmKey.ascent();
-        p.setPen(QColor(245, 245, 245));
+        p.setPen(keyCol);
         p.drawText(colX[c], baseY, keys.at(i).first);
-        p.setPen(QColor(170, 170, 170));
+        p.setPen(labelCol);
         p.drawText(colX[c] + colKeyW[c] + keyGap, baseY, keys.at(i).second);
     }
     p.end();

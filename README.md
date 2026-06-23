@@ -22,7 +22,7 @@ BT.2020 or Display-P3 primaries. SDR + RAW (via Qt + kimageformats): PNG, JPEG, 
 TIFF, BMP, GIF, SVG, TGA, ICO, QOI, JP2, PNM, XPM/XBM, PCX, PSD, and ~25 camera RAW
 formats (DNG, CR2/CR3, NEF, ARW, RAF, RW2, ORF, …).
 
-## Status — v0.4
+## Status — v0.5
 
 Early but functional. What works:
 
@@ -34,7 +34,8 @@ Early but functional. What works:
   (`i`) that also lists the keybindings.
 - Save the current view (crop + rotation) preserving the source format — overwrite
   in place (`Ctrl+S`) or save as (`Ctrl+Shift+S`).
-- Fully remappable keybindings (JSONC).
+- Fully remappable keybindings + a themeable appearance config (background,
+  overlay colours/font/opacity, window) — both JSONC.
 
 Planned next: JPEG-XL/HEIC encoding, a file-picker dialog, and live config reload —
 plus a longer wishlist in [ROADMAP.md](ROADMAP.md) (benchmarked against swayimg).
@@ -92,6 +93,17 @@ All keys are remappable in a JSONC config at
 run. The same defaults are in
 [`keybindings.default.jsonc`](keybindings.default.jsonc) for reference. The info
 overlay's key list reflects whatever you've configured.
+
+## Theming
+
+Appearance + behaviour live in `~/.config/vantaviewer/config.jsonc` (written on first
+run; [`config.default.jsonc`](config.default.jsonc) for reference):
+
+- `background` — `"black"` (true 0 nits on OLED), `"transparent"` (see your wallpaper
+  through the letterbox bars), or a hex colour like `"#101014"`.
+- `accent`, `text`, `overlayOpacity`, `font`, `fontSize` — theme the info card, keys
+  bar, crop chrome and toasts to match your setup.
+- `infoOverlay`, `windowWidth`/`windowHeight`, `fullscreen` — startup behaviour.
 
 If Qt logs go to journald instead of the terminal, run with
 `QT_FORCE_STDERR_LOGGING=1`.

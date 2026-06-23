@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/">
     <file>keybindings.default.jsonc</file>
+    <file>config.default.jsonc</file>
   </qresource>
 </RCC>

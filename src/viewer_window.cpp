@@ -34,13 +34,33 @@ static QShader loadShader(const QString &name)
     return QShader();
 }
 
-ViewerWindow::ViewerWindow(QVulkanInstance *inst, bool hdrMode)
-    : m_inst(inst), m_hdrMode(hdrMode)
+ViewerWindow::ViewerWindow(QVulkanInstance *inst, bool hdrMode, const Config &cfg)
+    : m_inst(inst), m_cfg(cfg), m_hdrMode(hdrMode)
 {
     setSurfaceType(QSurface::VulkanSurface);
     setVulkanInstance(inst);
     setTitle(QStringLiteral("vantaviewer"));
-    resize(1280, 800);
+    resize(cfg.windowWidth, cfg.windowHeight);
+    m_infoVisible = cfg.infoOverlay;
+    m_startFullscreenPending = cfg.fullscreen;
+    if (cfg.background == Config::Background::Transparent) {
+        QSurfaceFormat fmt = format();
+        fmt.setAlphaBufferSize(8);
+        setFormat(fmt);
+    }
+    // Letterbox background as linear RGB + alpha (the shader encodes per surface mode).
+    auto s2l = [](int v) { const float c = v / 255.0f;
+        return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); };
+    if (cfg.background == Config::Background::Transparent) {
+        m_bg[0] = m_bg[1] = m_bg[2] = 0.0f; m_bg[3] = 0.0f;
+    } else if (cfg.background == Config::Background::Colour) {
+        m_bg[0] = s2l(cfg.backgroundColour.red());
+        m_bg[1] = s2l(cfg.backgroundColour.green());
+        m_bg[2] = s2l(cfg.backgroundColour.blue());
+        m_bg[3] = 1.0f;
+    } else {
+        m_bg[0] = m_bg[1] = m_bg[2] = 0.0f; m_bg[3] = 1.0f; // black
+    }
     m_keys.load();
 
     // A neighbour/full-res decode finished: if it's the current image, upgrade in
@@ -225,6 +245,8 @@ void ViewerWindow::init()
 
     m_sc.reset(m_rhi->newSwapChain());
     m_sc->setWindow(this);
+    if (m_cfg.background == Config::Background::Transparent)
+        m_sc->setFlags(QRhiSwapChain::SurfaceHasNonPreMulAlpha);
 
     const QByteArray want = qgetenv("VANTAVIEWER_FORMAT").toLower();
     auto trySet = [&](QRhiSwapChain::Format f, const char *name) -> bool {
@@ -268,7 +290,7 @@ void ViewerWindow::init()
     m_sampler.reset(m_rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                       QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
     m_sampler->create();
-    m_ubo.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 12 * sizeof(float)));
+    m_ubo.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 16 * sizeof(float)));
     m_ubo->create();
 
     m_srb.reset(m_rhi->newShaderResourceBindings());
@@ -437,10 +459,11 @@ void ViewerWindow::render()
     const float sdrFlag = (m_hdrMode && m_hdrActive) ? 0.0f : 1.0f;
     const float imageHdr = (m_image && m_image->hdr) ? 1.0f : 0.0f;
     const float primaries = m_image ? float(int(m_image->primaries)) : 0.0f;
-    const float ubo[12] = {
+    const float ubo[16] = {
         m_scale, sdrFlag, imageHdr, float(m_view.rotation()),
         usx, usy, uox, uoy,
-        primaries, std::exp2(m_exposure), 0.0f, 0.0f
+        primaries, std::exp2(m_exposure), 0.0f, 0.0f,
+        m_bg[0], m_bg[1], m_bg[2], m_bg[3]
     };
     rub->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ubo), ubo);
 
@@ -505,7 +528,7 @@ void ViewerWindow::render()
         const QString label = QStringLiteral("%1  ·  %2×%3  ·  ⏎ apply").arg(m_crop.ratioName())
                                   .arg(qRound(cr.width())).arg(qRound(cr.height()));
         const QImage chrome = m_cropOv.build(outputSize, screenRect, freeform, label,
-                                             devicePixelRatio());
+                                             m_cfg.overlay, devicePixelRatio());
         if (m_cropTex->pixelSize() != chrome.size()) {
             m_cropTex->destroy();
             m_cropTex->setPixelSize(chrome.size());
@@ -576,7 +599,8 @@ void ViewerWindow::render()
         rub->updateDynamicBuffer(m_toastVbuf.get(), 0, sizeof(verts), verts);
     }
 
-    cb->beginPass(m_sc->currentFrameRenderTarget(), QColor(0, 0, 0, 255), { 1.0f, 0 }, rub);
+    const QColor clearCol(0, 0, 0, m_cfg.background == Config::Background::Transparent ? 0 : 255);
+    cb->beginPass(m_sc->currentFrameRenderTarget(), clearCol, { 1.0f, 0 }, rub);
     if (m_firstShown) {
         cb->setGraphicsPipeline(m_ps.get());
         cb->setViewport({ 0, 0, float(outputSize.width()), float(outputSize.height()) });
@@ -651,16 +675,17 @@ void ViewerWindow::rebuildInfoPanel()
     }
     m_panelImage = m_info.build(m_currentPath, *m_image, m_hdrMode,
                                 m_playlist.currentIndex() + 1, m_playlist.size(),
-                                m_exposure, devicePixelRatio());
+                                m_exposure, m_cfg.overlay, devicePixelRatio());
     m_panelDirty = true;
-    m_keysImage = m_info.buildKeysBar(keys, /*columns=*/3, devicePixelRatio());
+    m_keysImage = m_info.buildKeysBar(keys, /*columns=*/3, m_cfg.overlay, devicePixelRatio());
     m_keysDirty = true;
 }
 
-static QImage buildToastCard(const QString &text, qreal dpr)
+static QImage buildToastCard(const QString &text, const OverlayStyle &style, qreal dpr)
 {
     QFont font;
-    font.setPointSizeF(11.0);
+    font.setPointSizeF(style.fontSize);
+    if (!style.fontFamily.isEmpty()) font.setFamily(style.fontFamily);
     const QFontMetrics fm(font);
     const int pad = 12;
     const int w = fm.horizontalAdvance(text) + pad * 2;
@@ -673,10 +698,10 @@ static QImage buildToastCard(const QString &text, qreal dpr)
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0, 0, 0, 190));
+    p.setBrush(QColor(0, 0, 0, int(std::clamp(style.cardOpacity + 0.1, 0.0, 1.0) * 255)));
     p.drawRoundedRect(QRectF(0, 0, w, h), 8, 8);
     p.setFont(font);
-    p.setPen(QColor(245, 245, 245));
+    p.setPen(style.text);
     p.drawText(QRectF(0, 0, w, h), Qt::AlignCenter, text);
     p.end();
     return card;
@@ -684,7 +709,7 @@ static QImage buildToastCard(const QString &text, qreal dpr)
 
 void ViewerWindow::showToast(const QString &text)
 {
-    m_toastImage = buildToastCard(text, devicePixelRatio());
+    m_toastImage = buildToastCard(text, m_cfg.overlay, devicePixelRatio());
     m_toastDirty = true;
     m_toastVisible = true;
     m_cardCentered = false;
@@ -826,7 +851,7 @@ void ViewerWindow::rebuildPromptCard()
     } else {
         return;
     }
-    m_toastImage = buildToastCard(label, devicePixelRatio());
+    m_toastImage = buildToastCard(label, m_cfg.overlay, devicePixelRatio());
     m_toastDirty = true;
     m_toastVisible = true;
     m_cardCentered = true;
@@ -835,6 +860,11 @@ void ViewerWindow::rebuildPromptCard()
 
 void ViewerWindow::exposeEvent(QExposeEvent *)
 {
+    if (m_startFullscreenPending) {
+        m_startFullscreenPending = false;
+        setVisibility(QWindow::FullScreen);
+    }
+
     if (isExposed() && !m_initialized) {
         init();
         resizeSwapChain();
