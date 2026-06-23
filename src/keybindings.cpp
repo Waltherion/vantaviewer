@@ -46,7 +46,7 @@ QString baseToken(int key, const QString &text, bool hasNonShiftMod)
         return QString(QChar('a' + (key - Qt::Key_A)));
     if (key >= Qt::Key_0 && key <= Qt::Key_9)
         return QString(QChar('0' + (key - Qt::Key_0)));
-    // Non-ASCII / layout-specific (æ, ø, å, ...): use the typed character.
+    // Non-ASCII / layout-specific keys: use the typed character.
     if (!hasNonShiftMod && text.size() == 1 && text.at(0).isPrint())
         return text.toLower();
     return QString();
@@ -64,7 +64,7 @@ QString withMods(Qt::KeyboardModifiers mods, const QString &base)
     return s + base;
 }
 
-// Parse a config chord string ("Ctrl+I", "Right", "[", "æ") into the same
+// Parse a config chord string ("Ctrl+I", "Right", "[") into the same
 // normalised form as event tokens.
 QString normaliseChord(const QString &raw)
 {

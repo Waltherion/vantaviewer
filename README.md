@@ -89,9 +89,9 @@ extension you type. Everything is written at full resolution, luminance **and ga
 
 All keys are remappable in a JSONC config at
 `~/.config/vantaviewer/keybindings.jsonc`, written with US-layout defaults on first
-run — e.g. on a Danish layout you can bind rotation to `æ`/`ø`/`å`. The same defaults
-are in [`keybindings.default.jsonc`](keybindings.default.jsonc) for reference. The
-info overlay's key list reflects whatever you've configured.
+run. The same defaults are in
+[`keybindings.default.jsonc`](keybindings.default.jsonc) for reference. The info
+overlay's key list reflects whatever you've configured.
 
 If Qt logs go to journald instead of the terminal, run with
 `QT_FORCE_STDERR_LOGGING=1`.

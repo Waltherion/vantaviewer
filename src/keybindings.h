@@ -10,8 +10,8 @@ class QKeyEvent;
 // US-layout key positions (e.g. "[" / "]" for rotate); a user on another layout can
 // remap them in ~/.config/vantaviewer/keybindings.jsonc.
 //
-// A chord is written like "f", "Right", "Ctrl+I", "[", or "æ" (single non-ASCII
-// keys are matched by their typed character). An action may list several chords:
+// A chord is written like "f", "Right", "Ctrl+I", "[", or any single key (non-ASCII
+// layout keys are matched by their typed character). An action may list several chords:
 //   "fit": ["0", "="]
 class KeyBindings
 {
@@ -34,6 +34,6 @@ private:
     void mergeFromFile(const QString &path);
     void writeTemplate(const QString &path) const;
 
-    // action -> set of normalised chord strings ("ctrl+i", "[", "right", "å").
+    // action -> set of normalised chord strings ("ctrl+i", "[", "right", ...).
     QHash<QString, QStringList> m_actions;
 };
