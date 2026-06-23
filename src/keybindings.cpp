@@ -99,6 +99,9 @@ QByteArray stripJsonComments(QByteArray in)
     QString s = QString::fromUtf8(in);
     s.remove(block);
     s.remove(line);
+    // Tolerate trailing commas (JSONC): ",}" -> "}", ",]" -> "]".
+    static const QRegularExpression trailingComma(QStringLiteral(",(\\s*[}\\]])"));
+    s.replace(trailingComma, QStringLiteral("\\1"));
     return s.toUtf8();
 }
 
