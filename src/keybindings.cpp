@@ -127,6 +127,9 @@ void KeyBindings::setDefaults()
     add("rotateCW",   { "]" });
     add("rotateCCW",  { "[" });
     add("rotate180",  { "r" });
+    add("exposureUp",    { "." });
+    add("exposureDown",  { "," });
+    add("exposureReset", { "/" });
     add("crop",       { "c" });
     add("cropRatio",  { "x" });
     add("cropRatioPrev", { "z" });

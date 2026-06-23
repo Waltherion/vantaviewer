@@ -7,7 +7,7 @@
 #include <QLocale>
 
 QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitorHdr,
-                          int indexInFolder, int folderCount, qreal dpr) const
+                          int indexInFolder, int folderCount, float exposureEv, qreal dpr) const
 {
     const QFileInfo fi(path);
     const QString ext = fi.suffix().toUpper();
@@ -21,6 +21,10 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
                  .arg(QString::fromLatin1(primariesName(img.primaries)));
     lines << QStringLiteral("Monitor: %1").arg(monitorHdr ? QStringLiteral("HDR")
                                                           : QStringLiteral("SDR"));
+    if (exposureEv != 0.0f)
+        lines << QStringLiteral("Exposure: %1%2 EV").arg(exposureEv > 0 ? QStringLiteral("+")
+                                                                        : QString())
+                                                    .arg(double(exposureEv), 0, 'g', 2);
     if (folderCount > 0)
         lines << QStringLiteral("%1 / %2").arg(indexInFolder).arg(folderCount);
 

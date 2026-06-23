@@ -118,6 +118,7 @@ private:
     bool m_firstShown = false;
 
     ViewTransform m_view;
+    float m_exposure = 0.0f; // EV stops (display only; 0 = none)
     KeyBindings m_keys;
     Playlist m_playlist;
     ImageLoader m_loader;

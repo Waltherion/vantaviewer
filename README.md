@@ -22,7 +22,7 @@ BT.2020 or Display-P3 primaries. SDR + RAW (via Qt + kimageformats): PNG, JPEG, 
 TIFF, BMP, GIF, SVG, TGA, ICO, QOI, JP2, PNM, XPM/XBM, PCX, PSD, and ~25 camera RAW
 formats (DNG, CR2/CR3, NEF, ARW, RAF, RW2, ORF, …).
 
-## Status — v0.3
+## Status — v0.4
 
 Early but functional. What works:
 
@@ -58,7 +58,8 @@ Mouse: scroll to zoom (on the cursor), left-drag to pan, double-click to toggle
 fit ↔ 1:1.
 
 Default keys: `→`/`Space` next, `←` previous, `0`/`=` fit, `1` 1:1,
-`]`/`[` rotate ±90°, `r` rotate 180°, `c` crop, `x`/`z` cycle crop ratio,
+`]`/`[` rotate ±90°, `r` rotate 180°, `.`/`,` exposure ±, `/` reset exposure,
+`c` crop, `x`/`z` cycle crop ratio,
 `Ctrl+S` save (overwrite), `Ctrl+Shift+S` save as, `i` toggle the info overlay,
 `f` fullscreen, `q`/`Esc` quit (`Esc` also cancels crop / a save prompt). Arrow
 keys walk the folder of the opened file (sorted), with neighbours prefetched for
@@ -72,13 +73,14 @@ to apply the crop (the cut-away disappears and crop mode stays armed, so you can
 crop image after image quickly). Navigating away with unsaved crop/rotation prompts
 to save first (Enter = save, `N` = discard, `Esc` = cancel).
 
-Saving applies the current crop + rotation and **preserves the source format**,
-chosen by the output file's extension:
+Saving applies the current crop + rotation and **preserves the source format**
+(and primaries — BT.709/BT.2020/Display-P3), chosen by the output file's extension:
 
-- **AVIF** — HDR as 10-bit PQ, SDR as 8-bit sRGB.
-- **PNG** — HDR as 16-bit PQ with a `cICP` chunk (round-trips losslessly), SDR as 8-bit.
+- **AVIF** — HDR 10-bit PQ, SDR 8-bit sRGB.
+- **PNG** — HDR 16-bit PQ with a `cICP` chunk (round-trips losslessly), SDR 8-bit.
+- **JPEG-XL** — HDR 16-bit PQ, SDR 8-bit (libjxl).
+- **HEIC/HEIF** — HDR 10-bit PQ, SDR 8-bit (libheif + x265).
 - **JPEG / WebP / TIFF / BMP** — SDR only (these can't carry our HDR).
-- JPEG-XL and HEIC encoding aren't supported yet (you'll get a clear message).
 
 `Ctrl+S` overwrites the current file in place (a confirm prompt appears; Enter
 accepts). `Ctrl+Shift+S` is *Save as* — type a target path; the format follows the

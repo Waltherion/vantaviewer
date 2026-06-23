@@ -21,7 +21,7 @@ layout(std140, binding = 0) uniform U {
     vec2 uvScale;    // window-uv -> display-uv scale (fit/zoom)
     vec2 uvOffset;   // window-uv -> display-uv offset (pan)
     float primaries; // 0 = BT.709, 1 = BT.2020, 2 = Display-P3 (convert to BT.709)
-    float _pad0;
+    float exposure;  // linear multiplier (2^EV); 1.0 = no change
     float _pad1;
     float _pad2;
 } u;
@@ -89,6 +89,9 @@ void main()
         color = max(p3ToBt709(color), vec3(0.0));
     else if (u.primaries > 0.5)
         color = max(bt2020ToBt709(color), vec3(0.0));
+
+    // Exposure (mainly for scene-linear HDR like EXR, whose absolute level is arbitrary).
+    color *= u.exposure;
 
     if (u.sdr > 0.5) {
         if (u.imageHdr > 0.5) {

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4 — 2026-06-23
+
+- **JPEG-XL and HEIC encoding.** Save / overwrite / save-as now support `.jxl`
+  (libjxl) and `.heic`/`.heif` (libheif + x265) in addition to AVIF and PNG — HDR as
+  PQ (10-bit HEIC, 16-bit JXL) and SDR as sRGB, preserving BT.709/BT.2020/Display-P3
+  primaries. Round-trip-verified. So every HDR format vantaviewer reads, it can also
+  write back in place.
+- **Exposure control.** `.` / `,` raise/lower exposure in 0.5-EV steps, `/` resets;
+  shown in the info overlay. A display-only adjustment (resets per image), mainly for
+  scene-linear HDR (EXR/Radiance/PFM) whose absolute brightness is arbitrary.
+
 ## v0.3 — 2026-06-23
 
 - **Wide-gamut (BT.2020) export.** Decoders now keep the source's native primaries

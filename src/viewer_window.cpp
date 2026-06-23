@@ -87,7 +87,8 @@ bool ViewerWindow::showPath(const QString &path)
     if (path.isEmpty())
         return false;
     m_currentPath = path;
-    m_edited = false; // a freshly loaded image has no unsaved edits
+    m_edited = false;     // a freshly loaded image has no unsaved edits
+    m_exposure = 0.0f;    // reset exposure for the new image
 
     // Show the best we have immediately; if nothing is cached, decode synchronously
     // (the very first image, and any cold neighbour) so something appears at once.
@@ -439,7 +440,7 @@ void ViewerWindow::render()
     const float ubo[12] = {
         m_scale, sdrFlag, imageHdr, float(m_view.rotation()),
         usx, usy, uox, uoy,
-        primaries, 0.0f, 0.0f, 0.0f
+        primaries, std::exp2(m_exposure), 0.0f, 0.0f
     };
     rub->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ubo), ubo);
 
@@ -631,6 +632,8 @@ void ViewerWindow::rebuildInfoPanel()
         { QStringLiteral("rotateCW"), QStringLiteral("Rotate right") },
         { QStringLiteral("rotateCCW"), QStringLiteral("Rotate left") },
         { QStringLiteral("rotate180"), QStringLiteral("Rotate 180°") },
+        { QStringLiteral("exposureUp"), QStringLiteral("Exposure +") },
+        { QStringLiteral("exposureDown"), QStringLiteral("Exposure −") },
         { QStringLiteral("crop"), QStringLiteral("Crop") },
         { QStringLiteral("cropRatio"), QStringLiteral("Crop ratio +") },
         { QStringLiteral("cropRatioPrev"), QStringLiteral("Crop ratio −") },
@@ -648,7 +651,7 @@ void ViewerWindow::rebuildInfoPanel()
     }
     m_panelImage = m_info.build(m_currentPath, *m_image, m_hdrMode,
                                 m_playlist.currentIndex() + 1, m_playlist.size(),
-                                devicePixelRatio());
+                                m_exposure, devicePixelRatio());
     m_panelDirty = true;
     m_keysImage = m_info.buildKeysBar(keys, /*columns=*/3, devicePixelRatio());
     m_keysDirty = true;
@@ -972,6 +975,18 @@ void ViewerWindow::keyPressEvent(QKeyEvent *e)
         navigate(+1);
     } else if (action == QLatin1String("prev")) {
         navigate(-1);
+    } else if (action == QLatin1String("exposureUp")) {
+        m_exposure = std::min(m_exposure + 0.5f, 12.0f);
+        if (m_infoVisible) rebuildInfoPanel();
+        requestUpdate();
+    } else if (action == QLatin1String("exposureDown")) {
+        m_exposure = std::max(m_exposure - 0.5f, -12.0f);
+        if (m_infoVisible) rebuildInfoPanel();
+        requestUpdate();
+    } else if (action == QLatin1String("exposureReset")) {
+        m_exposure = 0.0f;
+        if (m_infoVisible) rebuildInfoPanel();
+        requestUpdate();
     } else if (action == QLatin1String("info")) {
         m_infoVisible = !m_infoVisible;
         if (m_infoVisible)

@@ -16,7 +16,7 @@ public:
     // The metadata card (top-left). monitorHdr drives the "Monitor: HDR/SDR" line;
     // indexInFolder is 1-based; folderCount <= 0 hides the position line.
     QImage build(const QString &path, const HdrImage &img, bool monitorHdr,
-                 int indexInFolder, int folderCount, qreal dpr) const;
+                 int indexInFolder, int folderCount, float exposureEv, qreal dpr) const;
 
     // The keybinding bar (bottom of screen), laid out in `columns` columns so it
     // stays short. keys is a list of (keyDisplay, label).
