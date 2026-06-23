@@ -712,6 +712,7 @@ void ViewerWindow::beginSaveAs()
         return;
     m_inputMode = Input::SaveAs;
     m_inputText = m_currentPath; // pre-filled with the current path; edit freely
+    m_inputCursor = m_inputText.size();
     rebuildPromptCard();
     requestUpdate();
 }
@@ -816,8 +817,9 @@ void ViewerWindow::rebuildPromptCard()
         label = QStringLiteral("Save changes to %1 ?    Enter = save    N = discard    Esc = cancel")
                     .arg(QFileInfo(m_currentPath).fileName());
     } else if (m_inputMode == Input::SaveAs) {
-        label = QStringLiteral("Save as:  %1▏    Enter = save    Esc = cancel")
-                    .arg(m_inputText);
+        const int c = qBound(0, m_inputCursor, m_inputText.size());
+        const QString withCaret = m_inputText.left(c) + QChar(0x2502) /* │ */ + m_inputText.mid(c);
+        label = QStringLiteral("Save as:  %1    Enter = save    Esc = cancel").arg(withCaret);
     } else {
         return;
     }
@@ -900,17 +902,30 @@ void ViewerWindow::keyPressEvent(QKeyEvent *e)
                 doNavigate(d);
             }
         } else if (m_inputMode == Input::SaveAs) {
+            const int len = m_inputText.size();
+            bool changed = true;
             if (enter) {
                 performSave(resolveSavePath(m_inputText), /*updateCurrent=*/false);
+                return;
+            } else if (e->key() == Qt::Key_Left) {
+                if (m_inputCursor > 0) --m_inputCursor;
+            } else if (e->key() == Qt::Key_Right) {
+                if (m_inputCursor < len) ++m_inputCursor;
+            } else if (e->key() == Qt::Key_Home) {
+                m_inputCursor = 0;
+            } else if (e->key() == Qt::Key_End) {
+                m_inputCursor = len;
             } else if (e->key() == Qt::Key_Backspace) {
-                m_inputText.chop(1);
-                rebuildPromptCard();
-                requestUpdate();
+                if (m_inputCursor > 0) { m_inputText.remove(m_inputCursor - 1, 1); --m_inputCursor; }
+            } else if (e->key() == Qt::Key_Delete) {
+                if (m_inputCursor < len) m_inputText.remove(m_inputCursor, 1);
             } else if (!e->text().isEmpty() && e->text().at(0).isPrint()) {
-                m_inputText += e->text();
-                rebuildPromptCard();
-                requestUpdate();
+                m_inputText.insert(m_inputCursor, e->text());
+                m_inputCursor += e->text().size();
+            } else {
+                changed = false;
             }
+            if (changed) { rebuildPromptCard(); requestUpdate(); }
         }
         return;
     }

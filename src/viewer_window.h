@@ -147,6 +147,7 @@ private:
     enum class Input { None, ConfirmOverwrite, SaveAs, ConfirmSaveNav };
     Input m_inputMode = Input::None;
     QString m_inputText;   // editable path while in SaveAs
+    int m_inputCursor = 0; // caret position within m_inputText
     QString m_inputTarget; // path to overwrite while in ConfirmOverwrite
 
     bool m_edited = false; // working image has unsaved crop/rotation edits
