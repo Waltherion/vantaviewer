@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3 — 2026-06-23
+
+- **Wide-gamut (BT.2020) export.** Decoders now keep the source's native primaries
+  instead of converting to BT.709 at decode time; the shader does the BT.2020→BT.709
+  conversion for display (unchanged on screen), and the encoder writes true BT.2020
+  (AVIF nclx / PNG cICP) when the source was BT.2020. Saving an HDR image no longer
+  clips it to the BT.709 working gamut — verified round-trip-preserved (PNG bit-exact).
+- **More input formats.** Added GIF, SVG, TGA, ICO, QOI, JP2, PNM (ppm/pgm/pbm),
+  XPM/XBM, PCX and PSD (decoded via Qt + kimageformats), on top of the existing
+  AVIF/JXL/HEIC/PNG/JPEG/WebP/TIFF/BMP. `.desktop` MIME types updated to match.
+
 ## v0.2 — 2026-06-22
 
 - Crop is now an edit: press Enter ("⏎ apply") to bake it into the working image so

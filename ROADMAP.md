@@ -7,8 +7,8 @@ lightweight SDR viewer); the goal is to *selectively* adopt what fits, not to cl
 1:1. Rough effort: 🟢 small · 🟡 medium · 🔴 large.
 
 ## Colour / HDR (the core niche — go deeper)
-- 🟡 Wide-gamut **BT.2020 export** — preserve the source gamut instead of the BT.709
-  working space (needs a native-primaries decode path).
+- ✅ ~~Wide-gamut **BT.2020 export**~~ — done in v0.3: native-primaries decode, shader
+  converts for display, encoder writes BT.2020 (AVIF nclx / PNG cICP).
 - 🟡 **JPEG-XL and HEIC encoding** — so those formats can be overwritten / saved in place.
 - 🟢 **Configurable SDR white level** — match the compositor's `sdrbrightness` vs the
   203-nit reference (one shader uniform).
@@ -16,8 +16,11 @@ lightweight SDR viewer); the goal is to *selectively* adopt what fits, not to cl
   a KF6 ThumbnailCreator plugin, so file-manager previews aren't grey.
 
 ## Viewing
-- 🟡 **More formats** — SVG (Qt SVG), GIF, TGA/PNM/QOI, **OpenEXR** (HDR!), farbfeld;
-  maybe RAW (libraw). SDR ones are mostly free via QImage.
+- 🟢 ~~**More SDR formats**~~ — done in v0.3: GIF, SVG, TGA, ICO, QOI, JP2, PNM,
+  XPM/XBM, PCX, PSD via Qt + kimageformats.
+- 🟡 **HDR float formats** — OpenEXR and Radiance .hdr decoded as *true HDR* (linear
+  float), not SDR-clamped. The kimg plugins read them but our path treats them as SDR.
+- 🟡 **RAW** (libraw via kimg_raw) — camera raws decode but need a sensible pipeline.
 - 🔴 **Animation playback** — GIF, animated WebP, APNG (multi-frame decode + loop).
 - 🟢 **Transparency checkerboard** background for images with alpha (toggle).
 - 🟡 **Scale modes** (fit / fill / real / width / height) + sampling/antialiasing options.

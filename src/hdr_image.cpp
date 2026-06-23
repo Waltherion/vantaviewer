@@ -145,14 +145,10 @@ float srgbEotf(float c)
     return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
 }
 
-// Linear BT.2020 -> linear BT.709 primaries.
-void bt2020ToBt709(float &r, float &g, float &b)
-{
-    const float R =  1.660491f * r - 0.587641f * g - 0.072850f * b;
-    const float G = -0.124550f * r + 1.132900f * g - 0.008349f * b;
-    const float B = -0.018151f * r - 0.100579f * g + 1.118730f * b;
-    r = R; g = G; b = B;
-}
+// NB: BT.2020 -> BT.709 primaries conversion is no longer done at decode time. The
+// decoders keep native primaries (HdrImage::bt2020 records BT.2020), so the working
+// image can be exported in its original gamut; the shader converts to BT.709 for
+// display and the SDR encode path converts when writing 8-bit sRGB.
 
 // Shared transfer model used by all HDR decoders.
 enum class Tf { SRGB, PQ, HLG, Linear };
@@ -271,8 +267,6 @@ HdrImage decodeAvif(const QString &path, int maxDim)
             float gg = linChan(float(src[x * 4 + 1]), tf);
             float bb = linChan(float(src[x * 4 + 2]), tf);
             const float aa = float(src[x * 4 + 3]);
-            if (bt2020)
-                bt2020ToBt709(rr, gg, bb);
             const size_t o = (size_t(y) * w + x) * 4;
             dst[o + 0] = qfloat16(std::max(rr, 0.0f));
             dst[o + 1] = qfloat16(std::max(gg, 0.0f));
@@ -388,8 +382,6 @@ HdrImage decodeJxl(const QString &path)
             float rr = linChan(pixels[i * 4 + 0], tf);
             float gg = linChan(pixels[i * 4 + 1], tf);
             float bb = linChan(pixels[i * 4 + 2], tf);
-            if (bt2020)
-                bt2020ToBt709(rr, gg, bb);
             dst[i * 4 + 0] = qfloat16(std::max(rr, 0.0f));
             dst[i * 4 + 1] = qfloat16(std::max(gg, 0.0f));
             dst[i * 4 + 2] = qfloat16(std::max(bb, 0.0f));
@@ -476,8 +468,6 @@ HdrImage decodeHeic(const QString &path)
                 float gg = linChan(row[x * 4 + 1] / maxv, tf);
                 float bb = linChan(row[x * 4 + 2] / maxv, tf);
                 const float aa = row[x * 4 + 3] / maxv;
-                if (bt2020)
-                    bt2020ToBt709(rr, gg, bb);
                 const size_t o = (size_t(y) * w + x) * 4;
                 dst[o + 0] = qfloat16(std::max(rr, 0.0f));
                 dst[o + 1] = qfloat16(std::max(gg, 0.0f));
@@ -594,8 +584,6 @@ HdrImage decodeSdrImage(const QString &path)
             for (int x = 0; x < w; ++x) {
                 float rr = lut[line[x * 4 + 0]], gg = lut[line[x * 4 + 1]], bb = lut[line[x * 4 + 2]];
                 const float aa = line[x * 4 + 3] / 65535.0f;
-                if (bt2020)
-                    bt2020ToBt709(rr, gg, bb);
                 const size_t o = (size_t(y) * w + x) * 4;
                 dst[o + 0] = qfloat16(std::max(rr, 0.0f));
                 dst[o + 1] = qfloat16(std::max(gg, 0.0f));

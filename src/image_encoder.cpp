@@ -35,6 +35,15 @@ float srgbEncode(float c)
     return c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
 }
 
+// Linear BT.2020 -> linear BT.709 (for SDR output paths, which are BT.709/sRGB).
+void bt2020ToBt709(float &r, float &g, float &b)
+{
+    const float R =  1.660491f * r - 0.587641f * g - 0.072850f * b;
+    const float G = -0.124550f * r + 1.132900f * g - 0.008349f * b;
+    const float B = -0.018151f * r - 0.100579f * g + 1.118730f * b;
+    r = std::max(R, 0.0f); g = std::max(G, 0.0f); b = std::max(B, 0.0f);
+}
+
 uint32_t pngCrc(const uint8_t *buf, size_t len)
 {
     uint32_t table[256];
@@ -82,7 +91,7 @@ QImage::Format sdr8Format() { return QImage::Format_RGB888; }
 // ---- per-format encoders, operating on a pre-cropped/rotated fp16 buffer ----
 
 encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, int h,
-                              bool hdr, int quality)
+                              bool hdr, bool bt2020, int quality)
 {
     const int depth = hdr ? 10 : 8;
     const int maxv = (1 << depth) - 1;
@@ -90,10 +99,11 @@ encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, 
     avifImage *image = avifImageCreate(w, h, depth, AVIF_PIXEL_FORMAT_YUV444);
     if (!image)
         return { false, QStringLiteral("avifImageCreate failed") };
-    image->colorPrimaries = AVIF_COLOR_PRIMARIES_BT709;
+    image->colorPrimaries = bt2020 ? AVIF_COLOR_PRIMARIES_BT2020 : AVIF_COLOR_PRIMARIES_BT709;
     image->transferCharacteristics = hdr ? AVIF_TRANSFER_CHARACTERISTICS_PQ
                                          : AVIF_TRANSFER_CHARACTERISTICS_SRGB;
-    image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT709;
+    image->matrixCoefficients = bt2020 ? AVIF_MATRIX_COEFFICIENTS_BT2020_NCL
+                                       : AVIF_MATRIX_COEFFICIENTS_BT709;
     image->yuvRange = AVIF_RANGE_FULL;
 
     avifRGBImage rgb;
@@ -165,7 +175,8 @@ encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, 
     return { true, outPath };
 }
 
-encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, int h, bool hdr)
+encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, int h,
+                             bool hdr, bool bt2020)
 {
     QByteArray bytes;
     if (hdr) {
@@ -188,16 +199,19 @@ encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, i
         if (!img.save(&buf, "PNG"))
             return { false, QStringLiteral("PNG encode failed") };
         buf.close();
-        bytes = injectCicp(bytes, /*primaries BT.709*/ 1, /*transfer PQ*/ 16);
+        bytes = injectCicp(bytes, /*primaries*/ bt2020 ? 9 : 1, /*transfer PQ*/ 16);
     } else {
         QImage img(w, h, sdr8Format());
         for (int y = 0; y < h; ++y) {
             uchar *row = img.scanLine(y);
             for (int x = 0; x < w; ++x) {
                 const size_t s = (size_t(y) * w + x) * 4;
-                row[x * 3 + 0] = uchar(std::lround(srgbEncode(float(p[s + 0])) * 255.0f));
-                row[x * 3 + 1] = uchar(std::lround(srgbEncode(float(p[s + 1])) * 255.0f));
-                row[x * 3 + 2] = uchar(std::lround(srgbEncode(float(p[s + 2])) * 255.0f));
+                float r = float(p[s + 0]), g = float(p[s + 1]), b = float(p[s + 2]);
+                if (bt2020)
+                    bt2020ToBt709(r, g, b);
+                row[x * 3 + 0] = uchar(std::lround(srgbEncode(r) * 255.0f));
+                row[x * 3 + 1] = uchar(std::lround(srgbEncode(g) * 255.0f));
+                row[x * 3 + 2] = uchar(std::lround(srgbEncode(b) * 255.0f));
             }
         }
         QBuffer buf(&bytes);
@@ -214,16 +228,20 @@ encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, i
     return { true, outPath };
 }
 
-encoder::Result encodeQImageSdr(const QString &outPath, const qfloat16 *p, int w, int h)
+encoder::Result encodeQImageSdr(const QString &outPath, const qfloat16 *p, int w, int h,
+                                bool bt2020)
 {
     QImage img(w, h, sdr8Format());
     for (int y = 0; y < h; ++y) {
         uchar *row = img.scanLine(y);
         for (int x = 0; x < w; ++x) {
             const size_t s = (size_t(y) * w + x) * 4;
-            row[x * 3 + 0] = uchar(std::lround(srgbEncode(float(p[s + 0])) * 255.0f));
-            row[x * 3 + 1] = uchar(std::lround(srgbEncode(float(p[s + 1])) * 255.0f));
-            row[x * 3 + 2] = uchar(std::lround(srgbEncode(float(p[s + 2])) * 255.0f));
+            float r = float(p[s + 0]), g = float(p[s + 1]), b = float(p[s + 2]);
+            if (bt2020)
+                bt2020ToBt709(r, g, b);
+            row[x * 3 + 0] = uchar(std::lround(srgbEncode(r) * 255.0f));
+            row[x * 3 + 1] = uchar(std::lround(srgbEncode(g) * 255.0f));
+            row[x * 3 + 2] = uchar(std::lround(srgbEncode(b) * 255.0f));
         }
     }
     if (!img.save(outPath))
@@ -270,10 +288,10 @@ Result encode(const QString &outPath, const HdrImage &img,
     const qfloat16 *p = reinterpret_cast<const qfloat16 *>(edited.rgba16f.data());
 
     if (ext == QLatin1String("avif"))
-        return encodeAvifBuf(outPath, p, w, h, img.hdr, quality);
+        return encodeAvifBuf(outPath, p, w, h, img.hdr, img.bt2020, quality);
     if (ext == QLatin1String("png"))
-        return encodePngBuf(outPath, p, w, h, img.hdr);
-    return encodeQImageSdr(outPath, p, w, h);
+        return encodePngBuf(outPath, p, w, h, img.hdr, img.bt2020);
+    return encodeQImageSdr(outPath, p, w, h, img.bt2020);
 }
 
 } // namespace encoder

@@ -4,10 +4,18 @@
 #include <algorithm>
 
 static const QStringList kExtensions = {
-    QStringLiteral("png"),  QStringLiteral("jpg"),  QStringLiteral("jpeg"),
+    // HDR-aware decoders
     QStringLiteral("avif"), QStringLiteral("jxl"),  QStringLiteral("heic"),
-    QStringLiteral("heif"), QStringLiteral("webp"), QStringLiteral("tiff"),
-    QStringLiteral("tif"),  QStringLiteral("bmp"),
+    QStringLiteral("heif"),
+    // common SDR (Qt + kimageformats plugins)
+    QStringLiteral("png"),  QStringLiteral("jpg"),  QStringLiteral("jpeg"),
+    QStringLiteral("webp"), QStringLiteral("tiff"), QStringLiteral("tif"),
+    QStringLiteral("bmp"),  QStringLiteral("gif"),  QStringLiteral("svg"),
+    QStringLiteral("svgz"), QStringLiteral("tga"),  QStringLiteral("ico"),
+    QStringLiteral("qoi"),  QStringLiteral("jp2"),  QStringLiteral("ppm"),
+    QStringLiteral("pgm"),  QStringLiteral("pbm"),  QStringLiteral("pnm"),
+    QStringLiteral("xpm"),  QStringLiteral("xbm"),  QStringLiteral("pcx"),
+    QStringLiteral("psd"),
 };
 
 void Playlist::load(const QString &dir)

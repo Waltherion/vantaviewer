@@ -16,11 +16,12 @@ yourself. vantaviewer owns its own Vulkan swapchain and tags it via
 black on OLED and correct rendering in **both HDR and SDR monitor modes, with both
 HDR and SDR images** — without touching your compositor config.
 
-Supported formats: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG, 16-bit HDR PNG
-(cICP), and all the usual SDR formats (PNG/JPEG/WebP/TIFF/BMP) — same decoders as
-vantapaper (`src/hdr_image.cpp`).
+Supported formats: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG and 16-bit HDR
+PNG (cICP) via the HDR-aware decoders (`src/hdr_image.cpp`, shared with vantapaper),
+plus the usual SDR formats via Qt + kimageformats (PNG, JPEG, WebP, TIFF, BMP, GIF,
+SVG, TGA, ICO, QOI, JP2, PNM, XPM/XBM, PCX, PSD).
 
-## Status — v0.2
+## Status — v0.3
 
 Early but functional. What works:
 
@@ -34,7 +35,7 @@ Early but functional. What works:
   in place (`Ctrl+S`) or save as (`Ctrl+Shift+S`).
 - Fully remappable keybindings (JSONC).
 
-Planned next: wide-gamut (BT.2020) export, JPEG-XL/HEIC encoding, a file-picker
+Planned next: JPEG-XL/HEIC encoding, true-HDR EXR/Radiance decode, a file-picker
 dialog, and live config reload — plus a longer wishlist in [ROADMAP.md](ROADMAP.md)
 (benchmarked against swayimg).
 
@@ -81,9 +82,8 @@ chosen by the output file's extension:
 
 `Ctrl+S` overwrites the current file in place (a confirm prompt appears; Enter
 accepts). `Ctrl+Shift+S` is *Save as* — type a target path; the format follows the
-extension you type. Everything is written at full resolution and luminance. (The
-working/export gamut is BT.709; wide-gamut BT.2020 preservation is a planned
-refinement.)
+extension you type. Everything is written at full resolution, luminance **and gamut**
+— a BT.2020 source is saved as BT.2020 (AVIF nclx / PNG cICP), not clipped to BT.709.
 
 All keys are remappable in a JSONC config at
 `~/.config/vantaviewer/keybindings.jsonc`, written with US-layout defaults on first
