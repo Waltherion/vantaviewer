@@ -10,19 +10,22 @@ class QString;
 struct HdrImage {
     // How the source encoded its tone (for display + the info overlay).
     enum class HdrKind : unsigned char { Sdr, Pq, Hlg, GainMap, LinearHdr };
+    // Colour primaries the pixel data is stored in (native; converted at display/encode).
+    enum class Primaries : unsigned char { Bt709, Bt2020, DisplayP3 };
 
     int w = 0;
     int h = 0;
     std::vector<uint16_t> rgba16f; // w*h*4 halfs (raw fp16 bits)
     bool hdr = false;              // true HDR content (PQ/HLG/gain-map) vs SDR
     HdrKind kind = HdrKind::Sdr;   // specific transfer/source kind
-    bool bt2020 = false;           // source primaries were BT.2020 (vs BT.709/sRGB)
+    Primaries primaries = Primaries::Bt709; // native colour primaries
 
     bool valid() const { return w > 0 && h > 0 && rgba16f.size() == size_t(w) * h * 4; }
 };
 
-// Human-readable name for the info overlay ("SDR", "HDR PQ", ...).
+// Human-readable names for the info overlay.
 const char *hdrKindName(HdrImage::HdrKind kind);
+const char *primariesName(HdrImage::Primaries p);
 
 // Decode an UltraHDR (gain-map) JPEG via libultrahdr. Returns an invalid HdrImage
 // on failure (diagnostics go to stderr). This is the path mpv-based wallpapers

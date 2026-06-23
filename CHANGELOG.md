@@ -13,6 +13,12 @@
 - **True-HDR float formats.** OpenEXR, Radiance `.hdr` and PFM now decode as real HDR
   (scene-linear float taken directly, not SDR-clamped) — verified preserving linear
   values incl. highlights above 1.0.
+- **Display-P3 primaries.** The colour-primaries handling is now a 3-way enum
+  (BT.709 / BT.2020 / Display-P3). P3 sources (common in Apple/iPhone HDR — HEIC,
+  AVIF, JXL, UltraHDR, cICP/ICC) are detected, converted P3→BT.709 for display, and
+  preserved on export (AVIF SMPTE432 / PNG cICP 12). Round-trip-verified.
+- **RAW camera formats.** Added DNG, CR2/CR3/CRW, NEF/NRW, ARW/SR2/SRF, RAF, RW2,
+  ORF, PEF, SRW, X3F, 3FR, ERF, KDC, DCR, MOS, MEF, MRW, IIQ, RWL (via kimg_raw).
 
 ## v0.2 — 2026-06-22
 

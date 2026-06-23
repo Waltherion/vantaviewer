@@ -17,9 +17,10 @@ black on OLED and correct rendering in **both HDR and SDR monitor modes, with bo
 HDR and SDR images** — without touching your compositor config.
 
 Supported formats — HDR: AVIF, JPEG-XL, HEIC/HEIF, UltraHDR gain-map JPEG, 16-bit
-HDR PNG (cICP), and scene-linear **OpenEXR / Radiance `.hdr` / PFM**. SDR (via Qt +
-kimageformats): PNG, JPEG, WebP, TIFF, BMP, GIF, SVG, TGA, ICO, QOI, JP2, PNM,
-XPM/XBM, PCX, PSD.
+HDR PNG (cICP), and scene-linear **OpenEXR / Radiance `.hdr` / PFM**, in BT.709,
+BT.2020 or Display-P3 primaries. SDR + RAW (via Qt + kimageformats): PNG, JPEG, WebP,
+TIFF, BMP, GIF, SVG, TGA, ICO, QOI, JP2, PNM, XPM/XBM, PCX, PSD, and ~25 camera RAW
+formats (DNG, CR2/CR3, NEF, ARW, RAF, RW2, ORF, …).
 
 ## Status — v0.3
 

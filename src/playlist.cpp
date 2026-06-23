@@ -18,6 +18,16 @@ static const QStringList kExtensions = {
     QStringLiteral("pgm"),  QStringLiteral("pbm"),  QStringLiteral("pnm"),
     QStringLiteral("xpm"),  QStringLiteral("xbm"),  QStringLiteral("pcx"),
     QStringLiteral("psd"),
+    // RAW camera formats (via kimg_raw / libraw)
+    QStringLiteral("dng"),  QStringLiteral("cr2"),  QStringLiteral("cr3"),
+    QStringLiteral("crw"),  QStringLiteral("nef"),  QStringLiteral("nrw"),
+    QStringLiteral("arw"),  QStringLiteral("sr2"),  QStringLiteral("srf"),
+    QStringLiteral("raf"),  QStringLiteral("rw2"),  QStringLiteral("orf"),
+    QStringLiteral("pef"),  QStringLiteral("srw"),  QStringLiteral("x3f"),
+    QStringLiteral("raw"),  QStringLiteral("3fr"),  QStringLiteral("erf"),
+    QStringLiteral("kdc"),  QStringLiteral("dcr"),  QStringLiteral("mos"),
+    QStringLiteral("mef"),  QStringLiteral("mrw"),  QStringLiteral("iiq"),
+    QStringLiteral("rwl"),
 };
 
 void Playlist::load(const QString &dir)

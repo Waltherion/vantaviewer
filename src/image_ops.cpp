@@ -27,7 +27,7 @@ HdrImage cropRotate(const HdrImage &img, const QRect &cropIn, int rot)
     out.h = (rot & 1) ? cw : ch;
     out.hdr = img.hdr;
     out.kind = img.kind;
-    out.bt2020 = img.bt2020;
+    out.primaries = img.primaries;
     out.rgba16f.resize(size_t(out.w) * out.h * 4);
     qfloat16 *dst = reinterpret_cast<qfloat16 *>(out.rgba16f.data());
 

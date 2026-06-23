@@ -18,7 +18,7 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
     lines << QStringLiteral("%1 × %2  ·  %3  ·  %4").arg(img.w).arg(img.h).arg(ext).arg(size);
     lines << QStringLiteral("%1  ·  %2")
                  .arg(QString::fromLatin1(hdrKindName(img.kind)))
-                 .arg(img.bt2020 ? QStringLiteral("Rec.2020") : QStringLiteral("Rec.709"));
+                 .arg(QString::fromLatin1(primariesName(img.primaries)));
     lines << QStringLiteral("Monitor: %1").arg(monitorHdr ? QStringLiteral("HDR")
                                                           : QStringLiteral("SDR"));
     if (folderCount > 0)

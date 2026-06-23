@@ -35,12 +35,21 @@ float srgbEncode(float c)
     return c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
 }
 
-// Linear BT.2020 -> linear BT.709 (for SDR output paths, which are BT.709/sRGB).
-void bt2020ToBt709(float &r, float &g, float &b)
+// Convert native primaries -> linear BT.709 (for SDR output paths, which are sRGB).
+void toBt709(float &r, float &g, float &b, HdrImage::Primaries prim)
 {
-    const float R =  1.660491f * r - 0.587641f * g - 0.072850f * b;
-    const float G = -0.124550f * r + 1.132900f * g - 0.008349f * b;
-    const float B = -0.018151f * r - 0.100579f * g + 1.118730f * b;
+    float R = r, G = g, B = b;
+    if (prim == HdrImage::Primaries::Bt2020) {
+        R =  1.660491f * r - 0.587641f * g - 0.072850f * b;
+        G = -0.124550f * r + 1.132900f * g - 0.008349f * b;
+        B = -0.018151f * r - 0.100579f * g + 1.118730f * b;
+    } else if (prim == HdrImage::Primaries::DisplayP3) {
+        R =  1.224940f * r - 0.224940f * g;
+        G = -0.042057f * r + 1.042057f * g;
+        B = -0.019638f * r - 0.078636f * g + 1.098274f * b;
+    } else {
+        return; // already BT.709
+    }
     r = std::max(R, 0.0f); g = std::max(G, 0.0f); b = std::max(B, 0.0f);
 }
 
@@ -91,7 +100,7 @@ QImage::Format sdr8Format() { return QImage::Format_RGB888; }
 // ---- per-format encoders, operating on a pre-cropped/rotated fp16 buffer ----
 
 encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, int h,
-                              bool hdr, bool bt2020, int quality)
+                              bool hdr, HdrImage::Primaries prim, int quality)
 {
     const int depth = hdr ? 10 : 8;
     const int maxv = (1 << depth) - 1;
@@ -99,11 +108,22 @@ encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, 
     avifImage *image = avifImageCreate(w, h, depth, AVIF_PIXEL_FORMAT_YUV444);
     if (!image)
         return { false, QStringLiteral("avifImageCreate failed") };
-    image->colorPrimaries = bt2020 ? AVIF_COLOR_PRIMARIES_BT2020 : AVIF_COLOR_PRIMARIES_BT709;
+    switch (prim) {
+    case HdrImage::Primaries::Bt2020:
+        image->colorPrimaries = AVIF_COLOR_PRIMARIES_BT2020;
+        image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT2020_NCL;
+        break;
+    case HdrImage::Primaries::DisplayP3:
+        image->colorPrimaries = AVIF_COLOR_PRIMARIES_SMPTE432;
+        image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT709;
+        break;
+    default:
+        image->colorPrimaries = AVIF_COLOR_PRIMARIES_BT709;
+        image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT709;
+        break;
+    }
     image->transferCharacteristics = hdr ? AVIF_TRANSFER_CHARACTERISTICS_PQ
                                          : AVIF_TRANSFER_CHARACTERISTICS_SRGB;
-    image->matrixCoefficients = bt2020 ? AVIF_MATRIX_COEFFICIENTS_BT2020_NCL
-                                       : AVIF_MATRIX_COEFFICIENTS_BT709;
     image->yuvRange = AVIF_RANGE_FULL;
 
     avifRGBImage rgb;
@@ -176,7 +196,7 @@ encoder::Result encodeAvifBuf(const QString &outPath, const qfloat16 *p, int w, 
 }
 
 encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, int h,
-                             bool hdr, bool bt2020)
+                             bool hdr, HdrImage::Primaries prim)
 {
     QByteArray bytes;
     if (hdr) {
@@ -199,7 +219,9 @@ encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, i
         if (!img.save(&buf, "PNG"))
             return { false, QStringLiteral("PNG encode failed") };
         buf.close();
-        bytes = injectCicp(bytes, /*primaries*/ bt2020 ? 9 : 1, /*transfer PQ*/ 16);
+        const uint8_t pcicp = prim == HdrImage::Primaries::Bt2020 ? 9
+                            : prim == HdrImage::Primaries::DisplayP3 ? 12 : 1;
+        bytes = injectCicp(bytes, pcicp, /*transfer PQ*/ 16);
     } else {
         QImage img(w, h, sdr8Format());
         for (int y = 0; y < h; ++y) {
@@ -207,8 +229,7 @@ encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, i
             for (int x = 0; x < w; ++x) {
                 const size_t s = (size_t(y) * w + x) * 4;
                 float r = float(p[s + 0]), g = float(p[s + 1]), b = float(p[s + 2]);
-                if (bt2020)
-                    bt2020ToBt709(r, g, b);
+                toBt709(r, g, b, prim);
                 row[x * 3 + 0] = uchar(std::lround(srgbEncode(r) * 255.0f));
                 row[x * 3 + 1] = uchar(std::lround(srgbEncode(g) * 255.0f));
                 row[x * 3 + 2] = uchar(std::lround(srgbEncode(b) * 255.0f));
@@ -229,7 +250,7 @@ encoder::Result encodePngBuf(const QString &outPath, const qfloat16 *p, int w, i
 }
 
 encoder::Result encodeQImageSdr(const QString &outPath, const qfloat16 *p, int w, int h,
-                                bool bt2020)
+                                HdrImage::Primaries prim)
 {
     QImage img(w, h, sdr8Format());
     for (int y = 0; y < h; ++y) {
@@ -237,8 +258,7 @@ encoder::Result encodeQImageSdr(const QString &outPath, const qfloat16 *p, int w
         for (int x = 0; x < w; ++x) {
             const size_t s = (size_t(y) * w + x) * 4;
             float r = float(p[s + 0]), g = float(p[s + 1]), b = float(p[s + 2]);
-            if (bt2020)
-                bt2020ToBt709(r, g, b);
+            toBt709(r, g, b, prim);
             row[x * 3 + 0] = uchar(std::lround(srgbEncode(r) * 255.0f));
             row[x * 3 + 1] = uchar(std::lround(srgbEncode(g) * 255.0f));
             row[x * 3 + 2] = uchar(std::lround(srgbEncode(b) * 255.0f));
@@ -288,10 +308,10 @@ Result encode(const QString &outPath, const HdrImage &img,
     const qfloat16 *p = reinterpret_cast<const qfloat16 *>(edited.rgba16f.data());
 
     if (ext == QLatin1String("avif"))
-        return encodeAvifBuf(outPath, p, w, h, img.hdr, img.bt2020, quality);
+        return encodeAvifBuf(outPath, p, w, h, img.hdr, img.primaries, quality);
     if (ext == QLatin1String("png"))
-        return encodePngBuf(outPath, p, w, h, img.hdr, img.bt2020);
-    return encodeQImageSdr(outPath, p, w, h, img.bt2020);
+        return encodePngBuf(outPath, p, w, h, img.hdr, img.primaries);
+    return encodeQImageSdr(outPath, p, w, h, img.primaries);
 }
 
 } // namespace encoder

@@ -20,19 +20,28 @@ layout(std140, binding = 0) uniform U {
     float rot;       // rotation quadrant: 0/1/2/3 == 0/90/180/270 clockwise
     vec2 uvScale;    // window-uv -> display-uv scale (fit/zoom)
     vec2 uvOffset;   // window-uv -> display-uv offset (pan)
-    float bt2020;    // >0.5 -> image is in BT.2020 primaries; convert to BT.709 for display
+    float primaries; // 0 = BT.709, 1 = BT.2020, 2 = Display-P3 (convert to BT.709)
     float _pad0;
     float _pad1;
     float _pad2;
 } u;
 
-// Linear BT.2020 -> linear BT.709 primaries (matches the old decode-time conversion).
+// Linear BT.2020 -> linear BT.709 primaries.
 vec3 bt2020ToBt709(vec3 c)
 {
     return vec3(
          1.660491 * c.r - 0.587641 * c.g - 0.072850 * c.b,
         -0.124550 * c.r + 1.132900 * c.g - 0.008349 * c.b,
         -0.018151 * c.r - 0.100579 * c.g + 1.118730 * c.b);
+}
+
+// Linear Display-P3 (D65) -> linear BT.709 primaries.
+vec3 p3ToBt709(vec3 c)
+{
+    return vec3(
+         1.224940 * c.r - 0.224940 * c.g + 0.000000 * c.b,
+        -0.042057 * c.r + 1.042057 * c.g + 0.000000 * c.b,
+        -0.019638 * c.r - 0.078636 * c.g + 1.098274 * c.b);
 }
 
 layout(binding = 1) uniform sampler2D tex;
@@ -73,10 +82,12 @@ void main()
 
     vec3 color = texture(tex, iuv).rgb;
 
-    // Image is stored in its native primaries; convert BT.2020 -> BT.709 for the
-    // BT.709-primaries surface. Clamp out-of-709-gamut negatives for safe display
-    // (export keeps the full BT.2020 data via a separate path).
-    if (u.bt2020 > 0.5)
+    // Image is stored in its native primaries; convert to the BT.709-primaries
+    // surface for display. Clamp out-of-709-gamut negatives for safe display (export
+    // keeps the full native-gamut data via a separate path).
+    if (u.primaries > 1.5)
+        color = max(p3ToBt709(color), vec3(0.0));
+    else if (u.primaries > 0.5)
         color = max(bt2020ToBt709(color), vec3(0.0));
 
     if (u.sdr > 0.5) {

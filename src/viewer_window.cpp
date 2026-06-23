@@ -435,11 +435,11 @@ void ViewerWindow::render()
     // swapchain. On an SDR display (e.g. a laptop) this falls back to correct sRGB.
     const float sdrFlag = (m_hdrMode && m_hdrActive) ? 0.0f : 1.0f;
     const float imageHdr = (m_image && m_image->hdr) ? 1.0f : 0.0f;
-    const float bt2020 = (m_image && m_image->bt2020) ? 1.0f : 0.0f;
+    const float primaries = m_image ? float(int(m_image->primaries)) : 0.0f;
     const float ubo[12] = {
         m_scale, sdrFlag, imageHdr, float(m_view.rotation()),
         usx, usy, uox, uoy,
-        bt2020, 0.0f, 0.0f, 0.0f
+        primaries, 0.0f, 0.0f, 0.0f
     };
     rub->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ubo), ubo);
 

@@ -9,6 +9,8 @@ lightweight SDR viewer); the goal is to *selectively* adopt what fits, not to cl
 ## Colour / HDR (the core niche — go deeper)
 - ✅ ~~Wide-gamut **BT.2020 export**~~ — done in v0.3: native-primaries decode, shader
   converts for display, encoder writes BT.2020 (AVIF nclx / PNG cICP).
+- ✅ ~~**Display-P3 primaries**~~ — done in v0.3: full BT.709/BT.2020/P3 enum; detected,
+  converted for display, preserved on export. (Apple/iPhone HDR.)
 - 🟡 **JPEG-XL and HEIC encoding** — so those formats can be overwritten / saved in place.
 - 🟢 **Configurable SDR white level** — match the compositor's `sdrbrightness` vs the
   203-nit reference (one shader uniform).
@@ -20,7 +22,8 @@ lightweight SDR viewer); the goal is to *selectively* adopt what fits, not to cl
   XPM/XBM, PCX, PSD via Qt + kimageformats.
 - ✅ ~~**HDR float formats**~~ — done in v0.3: OpenEXR, Radiance `.hdr` and PFM decode
   as true HDR (scene-linear float). Possible follow-up: exposure control.
-- 🟡 **RAW** (libraw via kimg_raw) — camera raws decode but need a sensible pipeline.
+- ✅ ~~**RAW**~~ — done in v0.3: ~25 camera-raw extensions open via kimg_raw/libraw.
+  Possible follow-up: expose libraw develop options (white balance, exposure).
 - 🔴 **Animation playback** — GIF, animated WebP, APNG (multi-frame decode + loop).
 - 🟢 **Transparency checkerboard** background for images with alpha (toggle).
 - 🟡 **Scale modes** (fit / fill / real / width / height) + sampling/antialiasing options.

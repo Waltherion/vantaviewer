@@ -176,7 +176,7 @@ float linChan(float c, Tf t)
 
 // Infer transfer + BT.2020-ness from an embedded ICC profile's description.
 // Real-world HDR (Lightroom etc.) tags colour this way rather than via CICP/nclx.
-Tf tfFromIcc(const void *icc, size_t size, bool &bt2020)
+Tf tfFromIcc(const void *icc, size_t size, HdrImage::Primaries &prim)
 {
     Tf t = Tf::SRGB;
     if (cmsHPROFILE p = cmsOpenProfileFromMem(icc, cmsUInt32Number(size))) {
@@ -187,7 +187,8 @@ Tf tfFromIcc(const void *icc, size_t size, bool &bt2020)
         if (d.contains("pq") || d.contains("2100") || d.contains("2084")) t = Tf::PQ;
         else if (d.contains("hlg")) t = Tf::HLG;
         else if (d.contains("linear")) t = Tf::Linear;
-        if (d.contains("2020") || d.contains("2100")) bt2020 = true;
+        if (d.contains("2020") || d.contains("2100")) prim = HdrImage::Primaries::Bt2020;
+        else if (d.contains("p3")) prim = HdrImage::Primaries::DisplayP3;
         std::fprintf(stderr, "vantaviewer: ICC profile = '%s'\n", desc);
     }
     return t;
@@ -213,7 +214,12 @@ HdrImage decodeAvif(const QString &path, int maxDim)
     }
 
     const int depth = int(img->depth);
-    bool bt2020 = (img->colorPrimaries == AVIF_COLOR_PRIMARIES_BT2020);
+    HdrImage::Primaries prim = HdrImage::Primaries::Bt709;
+    if (img->colorPrimaries == AVIF_COLOR_PRIMARIES_BT2020)
+        prim = HdrImage::Primaries::Bt2020;
+    else if (img->colorPrimaries == AVIF_COLOR_PRIMARIES_SMPTE432
+             || img->colorPrimaries == AVIF_COLOR_PRIMARIES_SMPTE431)
+        prim = HdrImage::Primaries::DisplayP3;
     Tf tf = Tf::SRGB;
     switch (img->transferCharacteristics) {
     case AVIF_TRANSFER_CHARACTERISTICS_PQ:     tf = Tf::PQ; break;
@@ -223,7 +229,7 @@ HdrImage decodeAvif(const QString &path, int maxDim)
     case AVIF_TRANSFER_CHARACTERISTICS_UNKNOWN:
         // CICP unspecified: define the colour space from the embedded ICC profile.
         if (img->icc.size > 0)
-            tf = tfFromIcc(img->icc.data, img->icc.size, bt2020);
+            tf = tfFromIcc(img->icc.data, img->icc.size, prim);
         break;
     default: break;
     }
@@ -276,10 +282,10 @@ HdrImage decodeAvif(const QString &path, int maxDim)
     });
 
     result.kind = kindFromTf(tf);
-    result.bt2020 = bt2020;
+    result.primaries = prim;
     result.hdr = (result.kind != HdrImage::HdrKind::Sdr);
-    std::fprintf(stderr, "vantaviewer: decoded AVIF %dx%d depth=%d transfer=%d bt2020=%d\n",
-                 w, h, depth, int(tf), int(bt2020));
+    std::fprintf(stderr, "vantaviewer: decoded AVIF %dx%d depth=%d transfer=%d primaries=%d\n",
+                 w, h, depth, int(tf), int(prim));
 
     avifRGBImageFreePixels(&rgb);
     avifImageDestroy(img);
@@ -309,7 +315,7 @@ HdrImage decodeJxl(const QString &path)
 
     const JxlPixelFormat fmt = { 4, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0 };
     Tf tf = Tf::SRGB;
-    bool bt2020 = false;
+    HdrImage::Primaries prim = HdrImage::Primaries::Bt709;
     std::vector<float> pixels;
     int w = 0, h = 0;
     bool ok = false;
@@ -342,7 +348,10 @@ HdrImage decodeJxl(const QString &path)
                 case JXL_TRANSFER_FUNCTION_LINEAR: tf = Tf::Linear; break;
                 default:                           tf = Tf::SRGB; break;
                 }
-                bt2020 = (enc.primaries == JXL_PRIMARIES_2100);
+                if (enc.primaries == JXL_PRIMARIES_2100)
+                    prim = HdrImage::Primaries::Bt2020;
+                else if (enc.primaries == JXL_PRIMARIES_P3)
+                    prim = HdrImage::Primaries::DisplayP3;
             } else {
                 size_t iccSize = 0;
                 if (JxlDecoderGetICCProfileSize(dec, JXL_COLOR_PROFILE_TARGET_DATA, &iccSize) == JXL_DEC_SUCCESS
@@ -350,7 +359,7 @@ HdrImage decodeJxl(const QString &path)
                     std::vector<uint8_t> icc(iccSize);
                     if (JxlDecoderGetColorAsICCProfile(dec, JXL_COLOR_PROFILE_TARGET_DATA, icc.data(), iccSize)
                         == JXL_DEC_SUCCESS)
-                        tf = tfFromIcc(icc.data(), iccSize, bt2020);
+                        tf = tfFromIcc(icc.data(), iccSize, prim);
                 }
             }
             break;
@@ -389,9 +398,9 @@ HdrImage decodeJxl(const QString &path)
         }
     });
     result.kind = kindFromTf(tf);
-    result.bt2020 = bt2020;
+    result.primaries = prim;
     result.hdr = (result.kind != HdrImage::HdrKind::Sdr);
-    std::fprintf(stderr, "vantaviewer: decoded JXL %dx%d transfer=%d bt2020=%d\n", w, h, int(tf), int(bt2020));
+    std::fprintf(stderr, "vantaviewer: decoded JXL %dx%d transfer=%d primaries=%d\n", w, h, int(tf), int(prim));
     return result;
 }
 
@@ -425,19 +434,23 @@ HdrImage decodeHeic(const QString &path)
 
     // Colour space from nclx (CICP), else from the embedded ICC profile.
     Tf tf = Tf::SRGB;
-    bool bt2020 = false;
+    HdrImage::Primaries prim = HdrImage::Primaries::Bt709;
     heif_color_profile_nclx *nclx = nullptr;
     if (heif_image_handle_get_nclx_color_profile(handle, &nclx).code == heif_error_Ok && nclx) {
         if (nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
             tf = Tf::PQ;
         else if (nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
             tf = Tf::HLG;
-        bt2020 = (nclx->color_primaries == heif_color_primaries_ITU_R_BT_2020_2_and_2100_0);
+        if (nclx->color_primaries == heif_color_primaries_ITU_R_BT_2020_2_and_2100_0)
+            prim = HdrImage::Primaries::Bt2020;
+        else if (nclx->color_primaries == heif_color_primaries_SMPTE_EG_432_1
+                 || nclx->color_primaries == heif_color_primaries_SMPTE_RP_431_2)
+            prim = HdrImage::Primaries::DisplayP3;
         heif_nclx_color_profile_free(nclx);
     } else if (size_t iccSize = heif_image_handle_get_raw_color_profile_size(handle)) {
         std::vector<uint8_t> icc(iccSize);
         if (heif_image_handle_get_raw_color_profile(handle, icc.data()).code == heif_error_Ok)
-            tf = tfFromIcc(icc.data(), iccSize, bt2020);
+            tf = tfFromIcc(icc.data(), iccSize, prim);
     }
 
     heif_image *img = nullptr;
@@ -476,10 +489,10 @@ HdrImage decodeHeic(const QString &path)
             }
         });
         result.kind = kindFromTf(tf);
-        result.bt2020 = bt2020;
+        result.primaries = prim;
         result.hdr = (result.kind != HdrImage::HdrKind::Sdr);
-        std::fprintf(stderr, "vantaviewer: decoded HEIC %dx%d bpp=%d transfer=%d bt2020=%d\n",
-                     w, h, bpp, int(tf), int(bt2020));
+        std::fprintf(stderr, "vantaviewer: decoded HEIC %dx%d bpp=%d transfer=%d primaries=%d\n",
+                     w, h, bpp, int(tf), int(prim));
     }
 
     heif_image_release(img);
@@ -493,7 +506,7 @@ HdrImage decodeHeic(const QString &path)
 // Read a PNG cICP chunk (the modern HDR PNG tag: primaries + transfer, like AVIF's
 // nclx). QImage ignores cICP, so we parse it ourselves. Returns true and sets
 // tf/bt2020 when the chunk specifies an HDR transfer.
-static bool readPngCicp(const QString &path, Tf &tf, bool &bt2020)
+static bool readPngCicp(const QString &path, Tf &tf, HdrImage::Primaries &prim)
 {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly))
@@ -521,7 +534,8 @@ static bool readPngCicp(const QString &path, Tf &tf, bool &bt2020)
                 case 8:  tf = Tf::Linear; break;
                 default: tf = Tf::SRGB; break;
                 }
-                bt2020 = (primaries == 9);
+                if (primaries == 9) prim = HdrImage::Primaries::Bt2020;
+                else if (primaries == 11 || primaries == 12) prim = HdrImage::Primaries::DisplayP3;
                 return tf != Tf::SRGB;
             }
             return false;
@@ -558,7 +572,7 @@ HdrImage decodeSdrImage(const QString &path)
             result.h = img.height();
             result.hdr = true;
             result.kind = HdrImage::HdrKind::LinearHdr;
-            result.bt2020 = false;
+            result.primaries = HdrImage::Primaries::Bt709;
             result.rgba16f.resize(size_t(result.w) * result.h * 4);
             qfloat16 *dst = reinterpret_cast<qfloat16 *>(result.rgba16f.data());
             const int w = result.w;
@@ -581,24 +595,24 @@ HdrImage decodeSdrImage(const QString &path)
     // A 16-bit PNG/TIFF may carry an HDR transfer either in an embedded ICC profile
     // (e.g. "Rec. 2020 PQ") or in a PNG cICP chunk. Detect either and treat as HDR.
     Tf tf = Tf::SRGB;
-    bool bt2020 = false;
+    HdrImage::Primaries prim = HdrImage::Primaries::Bt709;
     const QByteArray icc = img.colorSpace().isValid() ? img.colorSpace().iccProfile() : QByteArray();
     if (!icc.isEmpty())
-        tf = tfFromIcc(icc.constData(), size_t(icc.size()), bt2020);
+        tf = tfFromIcc(icc.constData(), size_t(icc.size()), prim);
     if (tf == Tf::SRGB) {
         Tf ctf = Tf::SRGB;
-        bool cbt = false;
-        if (readPngCicp(path, ctf, cbt)) {
+        HdrImage::Primaries cprim = HdrImage::Primaries::Bt709;
+        if (readPngCicp(path, ctf, cprim)) {
             tf = ctf;
-            bt2020 = cbt;
-            std::fprintf(stderr, "vantaviewer: PNG cICP HDR transfer=%d bt2020=%d\n", int(tf), int(bt2020));
+            prim = cprim;
+            std::fprintf(stderr, "vantaviewer: PNG cICP HDR transfer=%d primaries=%d\n", int(tf), int(prim));
         }
     }
 
     result.w = img.width();
     result.h = img.height();
     result.kind = kindFromTf(tf);
-    result.bt2020 = bt2020;
+    result.primaries = prim;
     result.hdr = (result.kind != HdrImage::HdrKind::Sdr);
     result.rgba16f.resize(size_t(result.w) * result.h * 4);
     qfloat16 *dst = reinterpret_cast<qfloat16 *>(result.rgba16f.data());
@@ -623,8 +637,8 @@ HdrImage decodeSdrImage(const QString &path)
                 dst[o + 3] = qfloat16(aa);
             }
         });
-        std::fprintf(stderr, "vantaviewer: loaded HDR image %dx%d via QImage (transfer=%d bt2020=%d)\n",
-                     result.w, result.h, int(tf), int(bt2020));
+        std::fprintf(stderr, "vantaviewer: loaded HDR image %dx%d via QImage (transfer=%d primaries=%d)\n",
+                     result.w, result.h, int(tf), int(prim));
     } else {
         // SDR: sRGB -> linear (8-bit LUT); black (0) stays 0 -> true black.
         img = img.convertToFormat(QImage::Format_RGBA8888);
@@ -678,5 +692,14 @@ const char *hdrKindName(HdrImage::HdrKind kind)
     case HdrImage::HdrKind::GainMap:   return "HDR gain-map";
     case HdrImage::HdrKind::LinearHdr: return "HDR linear";
     default:                           return "SDR";
+    }
+}
+
+const char *primariesName(HdrImage::Primaries p)
+{
+    switch (p) {
+    case HdrImage::Primaries::Bt2020:    return "Rec.2020";
+    case HdrImage::Primaries::DisplayP3: return "Display P3";
+    default:                             return "Rec.709";
     }
 }
