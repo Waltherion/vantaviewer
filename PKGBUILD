@@ -9,9 +9,12 @@ url="https://github.com/Waltherion/vantaviewer"
 license=('GPL-3.0-or-later')
 depends=(
   'qt6-base'
+  'qt6-imageformats'   # WebP, TIFF and other SDR formats via Qt plugins
+  'kimageformats'      # OpenEXR, Radiance HDR, PFM, QOI, JP2, TGA, PSD, PCX, RAW, ...
+  'qt6-svg'            # SVG
   'libavif'
   'libjxl'
-  'libheif'
+  'libheif'            # also pulls x265, used for HEIC/HEIF encoding
   'libultrahdr'
   'lcms2'
   'wayland'
