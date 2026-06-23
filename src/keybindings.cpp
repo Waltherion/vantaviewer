@@ -64,7 +64,7 @@ QString withMods(Qt::KeyboardModifiers mods, const QString &base)
     return s + base;
 }
 
-// Parse a config chord string ("Ctrl+I", "Right", "[") into the same
+// Parse a config chord string ("Ctrl+S", "Right", "[") into the same
 // normalised form as event tokens.
 QString normaliseChord(const QString &raw)
 {

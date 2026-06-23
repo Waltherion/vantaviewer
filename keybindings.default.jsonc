@@ -3,7 +3,7 @@
   // first run; edit that file (this one in the repo is just the reference default).
   //
   // Each action maps to one chord or a list of chords. A chord is e.g. "f", "Right",
-  // "Ctrl+I", "[", or any single key (including non-ASCII layout keys).
+  // "Ctrl+S", "[", or any single key (including non-ASCII layout keys).
   // Defaults below follow US-layout key positions; remap freely, e.g.
   //   "rotateCCW": "e",  "rotateCW": "t"
 

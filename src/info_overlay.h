@@ -7,7 +7,7 @@
 
 #include "hdr_image.h"
 
-// Builds the info panel (toggled with Ctrl+I): a small rounded translucent card with
+// Builds the info panel (toggled with `i`): a small rounded translucent card with
 // the filename, pixel size, format, HDR kind and colour primaries. Pure rendering to
 // an RGBA8 QImage in device pixels -- the window uploads it as an overlay texture.
 class InfoOverlay
