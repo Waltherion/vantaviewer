@@ -9,6 +9,7 @@ pkgbase = vantaviewer-git
 	makedepends = cmake
 	makedepends = ninja
 	makedepends = qt6-shadertools
+	makedepends = vulkan-headers
 	makedepends = wayland-protocols
 	makedepends = pkgconf
 	depends = qt6-base

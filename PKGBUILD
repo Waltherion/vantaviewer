@@ -25,6 +25,7 @@ makedepends=(
   'cmake'
   'ninja'
   'qt6-shadertools'
+  'vulkan-headers'     # QRhiVulkanInitParams (qrhi_platform.h) needs vulkan/vulkan.h
   'wayland-protocols'
   'pkgconf'
 )
