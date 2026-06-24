@@ -23,6 +23,7 @@ pkgbase = vantaviewer-git
 	depends = lcms2
 	depends = wayland
 	depends = vulkan-icd-loader
+	depends = hicolor-icon-theme
 	provides = vantaviewer
 	conflicts = vantaviewer
 	source = git+https://github.com/Waltherion/vantaviewer.git

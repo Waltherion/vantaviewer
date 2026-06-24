@@ -19,6 +19,7 @@ depends=(
   'lcms2'
   'wayland'
   'vulkan-icd-loader'
+  'hicolor-icon-theme' # owns the hicolor theme tree the app icon installs into
 )
 makedepends=(
   'git'
