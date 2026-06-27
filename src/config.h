@@ -6,10 +6,11 @@
 // Shared visual style for the QPainter-rendered overlays (info card, keys bar, crop
 // caption, toasts). Pulled from the user config so the look can be themed.
 struct OverlayStyle {
-    QColor accent{ 150, 190, 255 }; // headers / highlights
-    QColor text{ 235, 235, 235 };   // body text
+    // No-config fallback matches the "monochrome-minimalism" look (white-on-dark, Poppins).
+    QColor accent{ 255, 255, 255 }; // headers / highlights
+    QColor text{ 255, 255, 255 };   // body text
     double cardOpacity = 0.70;      // 0..1 background opacity of the cards
-    QString fontFamily;             // empty -> system default
+    QString fontFamily{ QStringLiteral("Poppins") }; // empty -> system default
     double fontSize = 11.0;         // overlay base point size
 };
 

@@ -8,10 +8,11 @@
   "background": "black",
 
   // Overlay theming (info card, keys bar, crop caption, toasts).
-  "accent": "#96beff",      // headers / highlights
-  "text": "#ebebeb",        // body text
+  // Defaults match the clean "monochrome-minimalism" look (white-on-dark, Poppins).
+  "accent": "#ffffff",      // headers / highlights
+  "text": "#ffffff",        // body text
   "overlayOpacity": 0.70,   // 0..1 — card background opacity
-  "font": "",               // overlay font family ("" = system default)
+  "font": "Poppins",        // overlay font family ("" = system default)
   "fontSize": 11.0,         // overlay base point size
 
   // Behaviour.
