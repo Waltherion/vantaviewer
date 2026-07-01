@@ -30,6 +30,9 @@ pkg_check_modules(Jxl REQUIRED IMPORTED_TARGET libjxl)
 # libheif for HEIC/HEIF (HDR PQ/HLG, 10/12-bit).
 pkg_check_modules(Heif REQUIRED IMPORTED_TARGET libheif)
 
+# exiv2 to read EXIF metadata (camera / exposure / date / GPS) for the info card.
+pkg_check_modules(Exiv2 REQUIRED IMPORTED_TARGET exiv2)
+
 # --- Generate the wp-color-management-v1 client protocol glue ---
 set(CM_XML "${WAYLAND_PROTOCOLS_DIR}/staging/color-management/color-management-v1.xml")
 set(CM_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/wl-protocols")
@@ -80,6 +83,7 @@ target_link_libraries(vantaviewer PRIVATE
     PkgConfig::Lcms2
     PkgConfig::Jxl
     PkgConfig::Heif
+    PkgConfig::Exiv2
     ${UHDR_LIB}
 )
 

@@ -17,6 +17,7 @@ depends=(
   'libheif'            # also pulls x265, used for HEIC/HEIF encoding
   'libultrahdr'
   'lcms2'
+  'exiv2'              # EXIF metadata (camera / exposure / date / GPS) for the info card
   'wayland'
   'vulkan-icd-loader'
   'hicolor-icon-theme' # owns the hicolor theme tree the app icon installs into

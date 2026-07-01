@@ -26,6 +26,22 @@ QImage InfoOverlay::build(const QString &path, const HdrImage &img, bool monitor
         lines << QStringLiteral("Exposure: %1%2 EV").arg(exposureEv > 0 ? QStringLiteral("+")
                                                                         : QString())
                                                     .arg(double(exposureEv), 0, 'g', 2);
+
+    // EXIF shot info (only the fields the file actually carries).
+    const HdrImage::ExifData &ex = img.exif;
+    if (ex.has) {
+        if (!ex.camera.isEmpty()) lines << ex.camera;
+        if (!ex.lens.isEmpty())   lines << ex.lens;
+        QStringList shot;
+        if (!ex.exposure.isEmpty()) shot << ex.exposure;
+        if (!ex.aperture.isEmpty()) shot << ex.aperture;
+        if (!ex.iso.isEmpty())      shot << ex.iso;
+        if (!ex.focal.isEmpty())    shot << ex.focal;
+        if (!shot.isEmpty())        lines << shot.join(QStringLiteral("  ·  "));
+        if (!ex.dateTime.isEmpty()) lines << ex.dateTime;
+        if (!ex.gps.isEmpty())      lines << QStringLiteral("GPS: ") + ex.gps;
+    }
+
     if (folderCount > 0)
         lines << QStringLiteral("%1 / %2").arg(indexInFolder).arg(folderCount);
 

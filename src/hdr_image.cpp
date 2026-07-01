@@ -12,11 +12,13 @@
 #include <lcms2.h>
 #include <jxl/decode.h>
 #include <libheif/heif.h>
+#include <exiv2/exiv2.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -661,27 +663,118 @@ HdrImage decodeSdrImage(const QString &path)
     return result;
 }
 
+namespace {
+
+// Interpreted (human-readable) value of an EXIF tag, or empty if absent.
+QString exifStr(const Exiv2::ExifData &d, const char *key)
+{
+    try {
+        auto it = d.findKey(Exiv2::ExifKey(key));
+        if (it == d.end())
+            return {};
+        return QString::fromStdString(it->print(&d)).trimmed();
+    } catch (const Exiv2::Error &) {
+        return {};
+    }
+}
+
+// GPSLatitude/Longitude are 3 rationals (deg, min, sec); combine with the N/S/E/W ref
+// into signed decimal degrees. ok=false when the tag is absent or malformed.
+double gpsDecimal(const Exiv2::ExifData &d, const char *coordKey, const char *refKey, bool &ok)
+{
+    ok = false;
+    try {
+        auto it = d.findKey(Exiv2::ExifKey(coordKey));
+        if (it == d.end() || it->count() < 3)
+            return 0.0;
+        double dec = double(it->toFloat(0)) + double(it->toFloat(1)) / 60.0
+                   + double(it->toFloat(2)) / 3600.0;
+        auto rf = d.findKey(Exiv2::ExifKey(refKey));
+        if (rf != d.end()) {
+            const std::string r = rf->toString();
+            if (!r.empty() && (r[0] == 'S' || r[0] == 'W'))
+                dec = -dec;
+        }
+        ok = true;
+        return dec;
+    } catch (const Exiv2::Error &) {
+        return 0.0;
+    }
+}
+
+// Read EXIF shot info from the file (any format exiv2 understands). Serialised: this runs
+// on the async decode threads, and we keep exiv2 access single-threaded to be safe.
+void readExif(const QString &path, HdrImage::ExifData &out)
+{
+    static std::mutex exivMutex;
+    std::lock_guard<std::mutex> lk(exivMutex);
+    try {
+        auto image = Exiv2::ImageFactory::open(path.toStdString());
+        if (!image)
+            return;
+        image->readMetadata();
+        const Exiv2::ExifData &d = image->exifData();
+        if (d.empty())
+            return;
+
+        const QString make = exifStr(d, "Exif.Image.Make");
+        const QString model = exifStr(d, "Exif.Image.Model");
+        if (!make.isEmpty() && !model.isEmpty() && !model.startsWith(make, Qt::CaseInsensitive))
+            out.camera = make + QLatin1Char(' ') + model;
+        else
+            out.camera = model.isEmpty() ? make : model;
+
+        out.lens = exifStr(d, "Exif.Photo.LensModel");
+        out.dateTime = exifStr(d, "Exif.Photo.DateTimeOriginal");
+        if (out.dateTime.isEmpty())
+            out.dateTime = exifStr(d, "Exif.Image.DateTime");
+        out.exposure = exifStr(d, "Exif.Photo.ExposureTime");
+        out.aperture = exifStr(d, "Exif.Photo.FNumber");
+        const QString iso = exifStr(d, "Exif.Photo.ISOSpeedRatings");
+        if (!iso.isEmpty())
+            out.iso = QStringLiteral("ISO ") + iso;
+        out.focal = exifStr(d, "Exif.Photo.FocalLength");
+
+        bool okLat = false, okLon = false;
+        const double lat = gpsDecimal(d, "Exif.GPSInfo.GPSLatitude", "Exif.GPSInfo.GPSLatitudeRef", okLat);
+        const double lon = gpsDecimal(d, "Exif.GPSInfo.GPSLongitude", "Exif.GPSInfo.GPSLongitudeRef", okLon);
+        if (okLat && okLon)
+            out.gps = QStringLiteral("%1, %2").arg(lat, 0, 'f', 5).arg(lon, 0, 'f', 5);
+
+        out.has = !out.camera.isEmpty() || !out.lens.isEmpty() || !out.dateTime.isEmpty()
+               || !out.exposure.isEmpty() || !out.aperture.isEmpty() || !out.iso.isEmpty()
+               || !out.focal.isEmpty() || !out.gps.isEmpty();
+    } catch (const Exiv2::Error &) {
+        // no/broken EXIF -> leave out.has = false
+    } catch (...) {
+        // defensive: metadata must never break a successful pixel decode
+    }
+}
+
+} // namespace
+
 HdrImage decodeImage(const QString &path, int maxDim)
 {
-    if (path.endsWith(QStringLiteral(".avif"), Qt::CaseInsensitive))
-        return decodeAvif(path, maxDim);
-
-    if (path.endsWith(QStringLiteral(".jxl"), Qt::CaseInsensitive))
-        return decodeJxl(path);
-
-    if (path.endsWith(QStringLiteral(".heic"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".heif"), Qt::CaseInsensitive))
-        return decodeHeic(path);
-
-    if (path.endsWith(QStringLiteral(".jpg"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".jpeg"), Qt::CaseInsensitive)) {
-        HdrImage uhdr = decodeUltraHdr(path); // UltraHDR gain-map JPEG, if it is one
-        if (uhdr.valid())
-            return uhdr;
-        // Otherwise fall through: a plain SDR JPEG.
+    HdrImage img;
+    if (path.endsWith(QStringLiteral(".avif"), Qt::CaseInsensitive)) {
+        img = decodeAvif(path, maxDim);
+    } else if (path.endsWith(QStringLiteral(".jxl"), Qt::CaseInsensitive)) {
+        img = decodeJxl(path);
+    } else if (path.endsWith(QStringLiteral(".heic"), Qt::CaseInsensitive)
+               || path.endsWith(QStringLiteral(".heif"), Qt::CaseInsensitive)) {
+        img = decodeHeic(path);
+    } else if (path.endsWith(QStringLiteral(".jpg"), Qt::CaseInsensitive)
+               || path.endsWith(QStringLiteral(".jpeg"), Qt::CaseInsensitive)) {
+        img = decodeUltraHdr(path); // UltraHDR gain-map JPEG, if it is one
+        if (!img.valid())
+            img = decodeSdrImage(path); // otherwise a plain SDR JPEG
+    } else {
+        img = decodeSdrImage(path); // PNG/JPEG/WebP/BMP/... via Qt
     }
 
-    return decodeSdrImage(path); // PNG/JPEG/WebP/BMP/... via Qt
+    if (img.valid())
+        readExif(path, img.exif); // camera/exposure/date/GPS for the info card
+    return img;
 }
 
 const char *hdrKindName(HdrImage::HdrKind kind)

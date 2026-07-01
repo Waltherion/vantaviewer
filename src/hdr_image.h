@@ -2,8 +2,7 @@
 
 #include <cstdint>
 #include <vector>
-
-class QString;
+#include <QString>
 
 // A decoded HDR image: tightly packed RGBA half-float (fp16) pixels, linear,
 // using libultrahdr's convention where 1.0 corresponds to 203 cd/m^2.
@@ -13,12 +12,26 @@ struct HdrImage {
     // Colour primaries the pixel data is stored in (native; converted at display/encode).
     enum class Primaries : unsigned char { Bt709, Bt2020, DisplayP3 };
 
+    // EXIF shot info for the info card (empty strings when absent). Read once at decode.
+    struct ExifData {
+        QString camera;    // make + model, e.g. "SONY ILCE-7M3"
+        QString lens;      // lens model
+        QString dateTime;  // capture date/time
+        QString exposure;  // shutter, e.g. "1/200 s"
+        QString aperture;  // e.g. "F2.8"
+        QString iso;       // e.g. "ISO 100"
+        QString focal;     // e.g. "50.0 mm"
+        QString gps;       // "lat, lon" in decimal degrees
+        bool has = false;  // any field populated
+    };
+
     int w = 0;
     int h = 0;
     std::vector<uint16_t> rgba16f; // w*h*4 halfs (raw fp16 bits)
     bool hdr = false;              // true HDR content (PQ/HLG/gain-map) vs SDR
     HdrKind kind = HdrKind::Sdr;   // specific transfer/source kind
     Primaries primaries = Primaries::Bt709; // native colour primaries
+    ExifData exif;                 // camera/exposure/date/GPS (if present)
 
     bool valid() const { return w > 0 && h > 0 && rgba16f.size() == size_t(w) * h * 4; }
 };

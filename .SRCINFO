@@ -21,6 +21,7 @@ pkgbase = vantaviewer-git
 	depends = libheif
 	depends = libultrahdr
 	depends = lcms2
+	depends = exiv2
 	depends = wayland
 	depends = vulkan-icd-loader
 	depends = hicolor-icon-theme
