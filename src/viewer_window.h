@@ -18,6 +18,7 @@
 
 #include <QImage>
 #include <QTimer>
+#include <QFileSystemWatcher>
 
 class QVulkanInstance;
 
@@ -63,6 +64,8 @@ private:
     void resizeTexture(const HdrImage &img);
     void rebuildInfoPanel(); // refresh the info card from the current image/mode
     void showToast(const QString &text);
+    void computeBg();        // (re)derive m_bg (linear letterbox colour) from m_cfg
+    void reloadConfig();     // re-read config + keybindings live and re-apply the look
 
     // Save flow. Ctrl+S overwrites the current file (with a confirm prompt, preserving
     // its format); Ctrl+Shift+S opens an in-place text field to type a target path.
@@ -88,6 +91,8 @@ private:
 
     QVulkanInstance *m_inst = nullptr;
     Config m_cfg;
+    QFileSystemWatcher m_cfgWatcher; // watches config.jsonc + keybindings.jsonc for live edits
+    QTimer m_cfgReloadTimer;         // debounces rapid saves into one reload
     bool m_startFullscreenPending = false;
     float m_bg[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // letterbox bg: linear rgb + alpha
 

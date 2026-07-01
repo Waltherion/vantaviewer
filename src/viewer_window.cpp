@@ -48,20 +48,29 @@ ViewerWindow::ViewerWindow(QVulkanInstance *inst, bool hdrMode, const Config &cf
         fmt.setAlphaBufferSize(8);
         setFormat(fmt);
     }
-    // Letterbox background as linear RGB + alpha (the shader encodes per surface mode).
-    auto s2l = [](int v) { const float c = v / 255.0f;
-        return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); };
-    if (cfg.background == Config::Background::Transparent) {
-        m_bg[0] = m_bg[1] = m_bg[2] = 0.0f; m_bg[3] = 0.0f;
-    } else if (cfg.background == Config::Background::Colour) {
-        m_bg[0] = s2l(cfg.backgroundColour.red());
-        m_bg[1] = s2l(cfg.backgroundColour.green());
-        m_bg[2] = s2l(cfg.backgroundColour.blue());
-        m_bg[3] = 1.0f;
-    } else {
-        m_bg[0] = m_bg[1] = m_bg[2] = 0.0f; m_bg[3] = 1.0f; // black
-    }
+    computeBg(); // letterbox background as linear RGB + alpha (shader encodes per surface mode)
     m_keys.load();
+
+    // Live config reload: watch the config + keybindings files and re-apply on save.
+    // Editors often replace the file (write-temp + rename), which drops it from the watcher,
+    // so re-add the path on each change; a short debounce collapses rapid saves into one reload.
+    for (const QString &p : { Config::configPath(), KeyBindings::configPath() }) {
+        if (!QFileInfo::exists(p))
+            continue;
+        m_cfgWatcher.addPath(p);
+        // Per-theme setups symlink the config; also watch the real target so edits to it fire.
+        const QString real = QFileInfo(p).canonicalFilePath();
+        if (!real.isEmpty() && real != p)
+            m_cfgWatcher.addPath(real);
+    }
+    m_cfgReloadTimer.setSingleShot(true);
+    m_cfgReloadTimer.setInterval(120);
+    connect(&m_cfgReloadTimer, &QTimer::timeout, this, &ViewerWindow::reloadConfig);
+    connect(&m_cfgWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &p) {
+        if (!m_cfgWatcher.files().contains(p) && QFileInfo::exists(p))
+            m_cfgWatcher.addPath(p);
+        m_cfgReloadTimer.start();
+    });
 
     // A neighbour/full-res decode finished: if it's the current image, upgrade in
     // place (keep zoom/pan/rotation); otherwise it just sits warm in the cache.
@@ -679,6 +688,36 @@ void ViewerWindow::rebuildInfoPanel()
     m_panelDirty = true;
     m_keysImage = m_info.buildKeysBar(keys, /*columns=*/3, m_cfg.overlay, devicePixelRatio());
     m_keysDirty = true;
+}
+
+void ViewerWindow::computeBg()
+{
+    auto s2l = [](int v) { const float c = v / 255.0f;
+        return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); };
+    if (m_cfg.background == Config::Background::Transparent) {
+        m_bg[0] = m_bg[1] = m_bg[2] = 0.0f; m_bg[3] = 0.0f;
+    } else if (m_cfg.background == Config::Background::Colour) {
+        m_bg[0] = s2l(m_cfg.backgroundColour.red());
+        m_bg[1] = s2l(m_cfg.backgroundColour.green());
+        m_bg[2] = s2l(m_cfg.backgroundColour.blue());
+        m_bg[3] = 1.0f;
+    } else {
+        m_bg[0] = m_bg[1] = m_bg[2] = 0.0f; m_bg[3] = 1.0f; // black
+    }
+}
+
+void ViewerWindow::reloadConfig()
+{
+    m_cfg = Config::load();
+    m_keys.load();
+    computeBg();
+    // Background transparency (surface alpha) + initial window size/fullscreen apply at
+    // construction only; editing those needs a restart. Colours, overlay style and
+    // keybindings apply immediately.
+    if (m_infoVisible)
+        rebuildInfoPanel(); // re-render info card + keys bar with the new overlay style
+    showToast(QStringLiteral("Config reloaded"));
+    render();
 }
 
 static QImage buildToastCard(const QString &text, const OverlayStyle &style, qreal dpr)
